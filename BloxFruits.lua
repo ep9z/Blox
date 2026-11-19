@@ -56,6 +56,7 @@ local ScriptRunning = true
 local LastHitTick = 0
 local LastPvPClickTick = 0
 local LastRollTick = 0
+local LastStoreTick = 0
 
 local AllowedChestNames = {
 	"GoldChest",
@@ -116,6 +117,7 @@ for _, fruitName in ipairs(BloxFruitNames) do
 	local withoutSuffix = string.gsub(lower, "%s*fruit%s*$", "")
 	if withoutSuffix ~= "" then
 		BloxFruitLookup[withoutSuffix] = fruitName
+		BloxFruitLookup[withoutSuffix .. "-" .. withoutSuffix] = fruitName
 	end
 end
 
@@ -163,14 +165,26 @@ local function resolveBloxFruitName(rawName)
 	if BloxFruitLookup[stripped] then
 		return BloxFruitLookup[stripped]
 	end
+	local dashBase = string.match(lower, "^([a-z%-]+)%-[a-z%-]+$")
+	if dashBase and BloxFruitLookup[dashBase] then
+		return BloxFruitLookup[dashBase]
+	end
 	for _, fullName in ipairs(BloxFruitNames) do
 		local fLower = string.lower(fullName)
 		local fBase = string.gsub(fLower, "%s*fruit%s*$", "")
-		if lower == fLower or lower == fBase then
+		if lower == fLower or lower == fBase or lower == (fBase .. "-" .. fBase) then
 			return fullName
 		end
 	end
 	return nil
+end
+
+local function getStoreFruitKey(item, resolvedName)
+	if item and item:GetAttribute("FruitName") then
+		return tostring(item:GetAttribute("FruitName"))
+	end
+	local base = string.gsub(resolvedName, "%s*Fruit%s*$", "")
+	return base .. "-" .. base
 end
 
 local function isPickupableFruitInstance(obj)
@@ -1251,6 +1265,11 @@ local function ensureEquippedIfNone()
 end
 
 local function storeFruitsInInventory()
+	local now = tick()
+	if (now - LastStoreTick) < 1.2 then
+		return
+	end
+	LastStoreTick = now
 	pcall(function()
 		local containers = {LocalPlayer:FindFirstChild("Backpack"), LocalPlayer.Character}
 		for _, cont in ipairs(containers) do
@@ -1258,18 +1277,40 @@ local function storeFruitsInInventory()
 				for _, item in ipairs(cont:GetChildren()) do
 					local resolvedFruit = item:IsA("Tool") and resolveBloxFruitName(item.Name) or nil
 					if resolvedFruit then
+						local fruitKey = getStoreFruitKey(item, resolvedFruit)
+						local storedViaRemote = false
+
 						for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
 							if rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent") then
 								local n = string.lower(rem.Name)
-								if string.find(n, "store") or string.find(n, "fruit") or string.find(n, "inventory") or string.find(n, "commf") then
+								if string.find(n, "commf") or string.find(n, "store") or string.find(n, "fruit") or string.find(n, "inventory") then
 									if rem:IsA("RemoteFunction") then
+										pcall(function() rem:InvokeServer("StoreFruit", fruitKey, item) end)
 										pcall(function() rem:InvokeServer("StoreFruit", resolvedFruit, item) end)
-										pcall(function() rem:InvokeServer(resolvedFruit, item) end)
-										pcall(function() rem:InvokeServer("Store", resolvedFruit) end)
+										pcall(function() rem:InvokeServer("Store", fruitKey) end)
+										pcall(function() rem:InvokeServer(fruitKey, item) end)
+										storedViaRemote = true
 									elseif rem:IsA("RemoteEvent") then
+										pcall(function() rem:FireServer("StoreFruit", fruitKey, item) end)
 										pcall(function() rem:FireServer("StoreFruit", resolvedFruit, item) end)
-										pcall(function() rem:FireServer(resolvedFruit, item) end)
-										pcall(function() rem:FireServer("Store", resolvedFruit) end)
+										pcall(function() rem:FireServer("Store", fruitKey) end)
+										pcall(function() rem:FireServer(fruitKey, item) end)
+										storedViaRemote = true
+									end
+								end
+							end
+						end
+
+						if not storedViaRemote then
+							for _, gui in ipairs(playerGui:GetDescendants()) do
+								if gui:IsA("TextButton") and gui.Visible then
+									local txt = string.lower(gui.Text)
+									if string.find(txt, "store") then
+										if getconnections then
+											for _, conn in ipairs(getconnections(gui.MouseButton1Click)) do
+												pcall(function() conn:Fire() end)
+											end
+										end
 									end
 								end
 							end
