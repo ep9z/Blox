@@ -31,6 +31,7 @@ local BoatNoclipEnabled = false
 local AutoChestEnabled = false
 local AutoAttackSeaEnabled = false
 local AutoQuestFarmEnabled = false
+local FarmVampireEnabled = false
 local BringMobsEnabled = true
 local AutoQuestEnabled = true
 local ESPEnabled = true
@@ -59,6 +60,13 @@ local function isSeaEvent(name)
 		end
 	end
 	return false
+end
+
+local function isVampireEnemy(model)
+	if not model or not model.Name then
+		return false
+	end
+	return string.find(string.lower(tostring(model.Name)), "vampire") ~= nil
 end
 
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -300,7 +308,7 @@ Container2.Position = Container1.Position
 Container2.BackgroundTransparency = 1
 Container2.ScrollBarThickness = 3
 Container2.ScrollBarImageColor3 = ThemeColor
-Container2.CanvasSize = UDim2.new(0, 0, 0, 140)
+Container2.CanvasSize = UDim2.new(0, 0, 0, 175)
 Container2.Visible = false
 Container2.Parent = MainFrame
 
@@ -655,15 +663,22 @@ end)
 
 createToggle(Container2, "Auto Farm Mobs", 0, false, function(state)
 	AutoQuestFarmEnabled = state
-	if not state and CurrentTween then
+	if not state and not FarmVampireEnabled and CurrentTween then
 		pcall(function() CurrentTween:Cancel() end)
 		CurrentTween = nil
 	end
 end)
-createToggle(Container2, "Bring Mobs Under You", 38, true, function(state)
+createToggle(Container2, "Farm Vampire (Fangs)", 38, false, function(state)
+	FarmVampireEnabled = state
+	if not state and not AutoQuestFarmEnabled and CurrentTween then
+		pcall(function() CurrentTween:Cancel() end)
+		CurrentTween = nil
+	end
+end)
+createToggle(Container2, "Bring Mobs Under You", 76, true, function(state)
 	BringMobsEnabled = state
 end)
-createToggle(Container2, "Auto Quest (Level Based)", 76, true, function(state)
+createToggle(Container2, "Auto Quest (Level Based)", 114, true, function(state)
 	AutoQuestEnabled = state
 end)
 
@@ -868,6 +883,31 @@ local function interactWithQuest(root, questPart)
 	end)
 end
 
+local function getNearestVampire(myPos)
+	local enemiesFolder = Workspace:FindFirstChild("Enemies")
+	if not enemiesFolder then
+		return nil, nil, nil
+	end
+
+	local bestEnemy, bestRoot, bestHum, bestDist = nil, nil, nil, math.huge
+	for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+		if enemy:IsA("Model") and isVampireEnemy(enemy) then
+			local eRoot = enemy:FindFirstChild("HumanoidRootPart")
+			local eHum = enemy:FindFirstChildOfClass("Humanoid")
+			if eRoot and eHum and eHum.Health > 0 then
+				local dist = (myPos - eRoot.Position).Magnitude
+				if dist < bestDist then
+					bestDist = dist
+					bestEnemy = enemy
+					bestRoot = eRoot
+					bestHum = eHum
+				end
+			end
+		end
+	end
+	return bestEnemy, bestRoot, bestHum
+end
+
 local function getNearestEnemy(myPos, myLvl)
 	local enemiesFolder = Workspace:FindFirstChild("Enemies")
 	if not enemiesFolder then
@@ -925,7 +965,7 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot)
 		if not enemiesFolder then
 			return
 		end
-		local stackPos = mainEnemyRoot and (mainEnemyRoot.Position + Vector3.new(0, 0, 0)) or (centerPos + Vector3.new(0, -4.5, -2.5))
+		local stackPos = mainEnemyRoot and mainEnemyRoot.Position or (centerPos + Vector3.new(0, -8.5, 0))
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 			if enemy:IsA("Model") then
 				local eRoot = enemy:FindFirstChild("HumanoidRootPart")
@@ -933,11 +973,15 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot)
 				if eRoot and eHum and eHum.Health > 0 then
 					local dist = (centerPos - eRoot.Position).Magnitude
 					if dist <= BringRadius then
-						eRoot.CanCollide = false
+						for _, part in ipairs(enemy:GetDescendants()) do
+							if part:IsA("BasePart") then
+								part.CanCollide = false
+								part.AssemblyLinearVelocity = Vector3.zero
+								part.AssemblyAngularVelocity = Vector3.zero
+							end
+						end
 						eRoot.Anchored = false
-						eRoot.AssemblyLinearVelocity = Vector3.zero
-						eRoot.AssemblyAngularVelocity = Vector3.zero
-						eRoot.CFrame = CFrame.new(stackPos, centerPos)
+						eRoot.CFrame = CFrame.new(stackPos, Vector3.new(centerPos.X, stackPos.Y, centerPos.Z))
 					end
 				end
 			end
@@ -948,7 +992,7 @@ end
 task.spawn(function()
 	while ScriptRunning do
 		task.wait(0.05)
-		if AutoQuestFarmEnabled then
+		if FarmVampireEnabled or AutoQuestFarmEnabled then
 			pcall(function()
 				local char = LocalPlayer.Character
 				local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -959,6 +1003,46 @@ task.spawn(function()
 
 				local myLvl = getPlayerLevel()
 				equipWeapon()
+
+				if FarmVampireEnabled then
+					local vampEnemy, vRoot, vHum = getNearestVampire(root.Position)
+					if vampEnemy and vRoot and vHum and vHum.Health > 0 then
+						local vLvl = getEnemyLevel(vampEnemy)
+						local lvlTag = vLvl and (" [Lv." .. tostring(vLvl) .. "]") or ""
+						StatusLabel.Text = "●  Fangs Farm: " .. tostring(vampEnemy.Name) .. lvlTag
+						StatusLabel.TextColor3 = Color3.fromRGB(244, 63, 94)
+
+						local targetPos = vRoot.Position + Vector3.new(0, 8.5, 0)
+						local lookCF = CFrame.lookAt(targetPos, vRoot.Position)
+						local dist = (root.Position - targetPos).Magnitude
+
+						if dist > 8.5 then
+							local duration = math.clamp(dist / math.max(FlySpeed, 60), 0.04, 2.5)
+							if CurrentTween then
+								pcall(function() CurrentTween:Cancel() end)
+							end
+							CurrentTween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = lookCF})
+							CurrentTween:Play()
+						else
+							if CurrentTween then
+								pcall(function() CurrentTween:Cancel() end)
+								CurrentTween = nil
+							end
+							root.CFrame = lookCF
+						end
+
+						root.AssemblyLinearVelocity = Vector3.zero
+						root.AssemblyAngularVelocity = Vector3.zero
+						bringMobsUnderPlayer(root.Position, vRoot)
+						if dist <= 26 then
+							triggerHit(char)
+						end
+					else
+						StatusLabel.Text = "●  Searching Vampire (Fangs)..."
+						StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+					end
+					return
+				end
 
 				if AutoQuestEnabled and not hasActiveQuest() then
 					local qPart, qDist = findQuestNPC(root.Position)
@@ -987,11 +1071,11 @@ task.spawn(function()
 					StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Farm: " .. tostring(mainEnemy.Name) .. lvlTag
 					StatusLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
 
-					local targetPos = eRoot.Position + Vector3.new(0, 4.5, 0)
+					local targetPos = eRoot.Position + Vector3.new(0, 8.5, 0)
 					local lookCF = CFrame.lookAt(targetPos, eRoot.Position)
 					local dist = (root.Position - targetPos).Magnitude
 
-					if dist > 7.5 then
+					if dist > 8.5 then
 						local duration = math.clamp(dist / math.max(FlySpeed, 60), 0.04, 2.5)
 						if CurrentTween then
 							pcall(function() CurrentTween:Cancel() end)
@@ -1007,8 +1091,9 @@ task.spawn(function()
 					end
 
 					root.AssemblyLinearVelocity = Vector3.zero
+					root.AssemblyAngularVelocity = Vector3.zero
 					bringMobsUnderPlayer(root.Position, eRoot)
-					if dist <= 24 then
+					if dist <= 26 then
 						triggerHit(char)
 					end
 				else
@@ -1250,10 +1335,11 @@ RunService.Stepped:Connect(function()
 			end
 		end
 
-		local noclipActive = AutoChestEnabled or AutoQuestFarmEnabled or (BoatNoclipEnabled and hum and hum.SeatPart)
+		local noclipActive = AutoChestEnabled or AutoQuestFarmEnabled or FarmVampireEnabled or (BoatNoclipEnabled and hum and hum.SeatPart)
 
-		if (AutoQuestFarmEnabled or AutoChestEnabled) and root then
+		if (AutoQuestFarmEnabled or AutoChestEnabled or FarmVampireEnabled) and root then
 			root.AssemblyLinearVelocity = Vector3.zero
+			root.AssemblyAngularVelocity = Vector3.zero
 		end
 
 		if noclipActive then
