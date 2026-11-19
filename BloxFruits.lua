@@ -3,6 +3,12 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+local VirtualUser = game:GetService("VirtualUser")
+
+local VirtualInputManager = nil
+pcall(function()
+	VirtualInputManager = game:GetService("VirtualInputManager")
+end)
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
@@ -799,9 +805,25 @@ local function ensureEquippedIfNone()
 	end)
 end
 
+local function isPointerOverUI()
+	local ok, over = pcall(function()
+		if not MainFrame.Visible then
+			return false
+		end
+		local mousePos = UserInputService:GetMouseLocation()
+		local topLeft = MainFrame.AbsolutePosition
+		local bottomRight = topLeft + MainFrame.AbsoluteSize
+		return mousePos.X >= topLeft.X and mousePos.X <= bottomRight.X and mousePos.Y >= topLeft.Y and mousePos.Y <= bottomRight.Y
+	end)
+	return ok and over or false
+end
+
 local function triggerHit(char)
+	if isPointerOverUI() then
+		return
+	end
 	local now = tick()
-	if (now - LastHitTick) < 0.09 then
+	if (now - LastHitTick) < 0.08 then
 		return
 	end
 	LastHitTick = now
@@ -809,6 +831,15 @@ local function triggerHit(char)
 		local tool = char and char:FindFirstChildOfClass("Tool")
 		if tool then
 			tool:Activate()
+		end
+		local x = Camera.ViewportSize.X * 0.5
+		local y = Camera.ViewportSize.Y * 0.5
+		if VirtualInputManager then
+			VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+			VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+		else
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton1(Vector2.new(x, y))
 		end
 	end)
 end
