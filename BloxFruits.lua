@@ -321,7 +321,7 @@ Container2.Position = Container1.Position
 Container2.BackgroundTransparency = 1
 Container2.ScrollBarThickness = 3
 Container2.ScrollBarImageColor3 = ThemeColor
-Container2.CanvasSize = UDim2.new(0, 0, 0, 215)
+Container2.CanvasSize = UDim2.new(0, 0, 0, 265)
 Container2.Visible = false
 Container2.Parent = MainFrame
 
@@ -445,6 +445,70 @@ local function createToggle(parent, text, yPos, defaultState, callback)
 		setState(not state)
 	end)
 	return row
+end
+
+local function createSlider(parent, yPos, prefix, minVal, maxVal, initialVal, onChange)
+	local card = Instance.new("Frame")
+	card.Size = UDim2.new(1, -6, 0, 42)
+	card.Position = UDim2.new(0, 2, 0, yPos)
+	card.BackgroundColor3 = CardDark
+	card.BorderSizePixel = 0
+	card.Parent = parent
+	Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+	local stroke = Instance.new("UIStroke", card)
+	stroke.Color = Color3.fromRGB(42, 36, 64)
+	stroke.Thickness = 1
+
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -20, 0, 16)
+	lbl.Position = UDim2.new(0, 10, 0, 5)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = prefix .. ": " .. tostring(initialVal)
+	lbl.TextColor3 = TextMain
+	lbl.Font = Enum.Font.GothamSemibold
+	lbl.TextSize = 10
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.Parent = card
+
+	local bg = Instance.new("Frame")
+	bg.Size = UDim2.new(1, -20, 0, 7)
+	bg.Position = UDim2.new(0, 10, 0, 26)
+	bg.BackgroundColor3 = Color3.fromRGB(32, 28, 48)
+	bg.BorderSizePixel = 0
+	bg.Parent = card
+	Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
+
+	local initRatio = math.clamp((initialVal - minVal) / (maxVal - minVal), 0, 1)
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.new(initRatio, 0, 1, 0)
+	fill.BackgroundColor3 = ThemeColor
+	fill.BorderSizePixel = 0
+	fill.Parent = bg
+	Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+	local dragging = false
+	bg.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			pcall(function()
+				local relX = math.clamp((input.Position.X - bg.AbsolutePosition.X) / bg.AbsoluteSize.X, 0, 1)
+				fill.Size = UDim2.new(relX, 0, 1, 0)
+				local val = math.floor(minVal + (relX * (maxVal - minVal)))
+				lbl.Text = prefix .. ": " .. tostring(val)
+				onChange(val)
+			end)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+	return card
 end
 
 local function clearBoatMover(seat)
@@ -615,63 +679,8 @@ createToggle(Container1, "Boat Speed Boost", 114, false, function(state)
 	end
 end)
 
-local SliderCard = Instance.new("Frame")
-SliderCard.Size = UDim2.new(1, -6, 0, 42)
-SliderCard.Position = UDim2.new(0, 2, 0, 152)
-SliderCard.BackgroundColor3 = CardDark
-SliderCard.BorderSizePixel = 0
-SliderCard.Parent = Container1
-Instance.new("UICorner", SliderCard).CornerRadius = UDim.new(0, 8)
-local sliderStroke = Instance.new("UIStroke", SliderCard)
-sliderStroke.Color = Color3.fromRGB(42, 36, 64)
-sliderStroke.Thickness = 1
-
-local SpeedLabel = Instance.new("TextLabel")
-SpeedLabel.Size = UDim2.new(1, -20, 0, 16)
-SpeedLabel.Position = UDim2.new(0, 10, 0, 5)
-SpeedLabel.BackgroundTransparency = 1
-SpeedLabel.Text = "Boat Speed: " .. tostring(TargetBoatSpeed)
-SpeedLabel.TextColor3 = TextMain
-SpeedLabel.Font = Enum.Font.GothamSemibold
-SpeedLabel.TextSize = 10
-SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
-SpeedLabel.Parent = SliderCard
-
-local SliderBg = Instance.new("Frame")
-SliderBg.Size = UDim2.new(1, -20, 0, 7)
-SliderBg.Position = UDim2.new(0, 10, 0, 26)
-SliderBg.BackgroundColor3 = Color3.fromRGB(32, 28, 48)
-SliderBg.BorderSizePixel = 0
-SliderBg.Parent = SliderCard
-Instance.new("UICorner", SliderBg).CornerRadius = UDim.new(1, 0)
-
-local SliderFill = Instance.new("Frame")
-SliderFill.Size = UDim2.new((TargetBoatSpeed - 16) / (1000 - 16), 0, 1, 0)
-SliderFill.BackgroundColor3 = ThemeColor
-SliderFill.BorderSizePixel = 0
-SliderFill.Parent = SliderBg
-Instance.new("UICorner", SliderFill).CornerRadius = UDim.new(1, 0)
-
-local draggingSlider = false
-SliderBg.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		draggingSlider = true
-	end
-end)
-UserInputService.InputChanged:Connect(function(input)
-	if draggingSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-		pcall(function()
-			local relX = math.clamp((input.Position.X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0, 1)
-			SliderFill.Size = UDim2.new(relX, 0, 1, 0)
-			TargetBoatSpeed = math.floor(16 + (relX * (1000 - 16)))
-			SpeedLabel.Text = "Boat Speed: " .. tostring(TargetBoatSpeed)
-		end)
-	end
-end)
-UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		draggingSlider = false
-	end
+createSlider(Container1, 152, "Boat Speed", 16, 1000, TargetBoatSpeed, function(val)
+	TargetBoatSpeed = val
 end)
 
 createToggle(Container2, "Auto Farm Mobs", 0, false, function(state)
@@ -700,6 +709,16 @@ createToggle(Container2, "Bring Mobs Under You", 114, true, function(state)
 end)
 createToggle(Container2, "Auto Quest (Level Based)", 152, true, function(state)
 	AutoQuestEnabled = state
+end)
+createSlider(Container2, 190, "Player Speed", 16, 800, FlySpeed, function(val)
+	FlySpeed = val
+	pcall(function()
+		local char = LocalPlayer.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			hum.WalkSpeed = val
+		end
+	end)
 end)
 
 createToggle(Container3, "Auto Attack Sea Beast / Shark", 0, false, function(state) AutoAttackSeaEnabled = state end)
@@ -1024,7 +1043,7 @@ local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefi
 		local dist = (root.Position - targetPos).Magnitude
 
 		if dist > 6.5 then
-			local duration = math.clamp(dist / math.max(FlySpeed, 60), 0.04, 2.5)
+			local duration = math.clamp(dist / math.max(FlySpeed, 16), 0.03, 4)
 			if CurrentTween then
 				pcall(function() CurrentTween:Cancel() end)
 			end
@@ -1091,7 +1110,7 @@ task.spawn(function()
 						local targetQPos = qPart.Position + Vector3.new(0, 2, -4)
 						local d = (root.Position - targetQPos).Magnitude
 						if d > 8 then
-							local dur = math.clamp(d / math.max(FlySpeed, 60), 0.05, 3)
+							local dur = math.clamp(d / math.max(FlySpeed, 16), 0.05, 4)
 							if CurrentTween then
 								pcall(function() CurrentTween:Cancel() end)
 							end
@@ -1335,6 +1354,10 @@ RunService.Stepped:Connect(function()
 		end
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		local root = char:FindFirstChild("HumanoidRootPart")
+
+		if hum and hasActiveTargetFarm() and hum.WalkSpeed ~= FlySpeed then
+			hum.WalkSpeed = FlySpeed
+		end
 
 		if AutoSailEnabled and hum and hum.SeatPart and root and LockedSailDir then
 			local eventName = getActiveSeaEvent(root.Position)
