@@ -63,6 +63,61 @@ local AllowedChestNames = {
 	"DiamondChest"
 }
 
+local BloxFruitNames = {
+	"Rocket Fruit",
+	"Spin Fruit",
+	"Blade Fruit",
+	"Chop Fruit",
+	"Spring Fruit",
+	"Bomb Fruit",
+	"Smoke Fruit",
+	"Spike Fruit",
+	"Flame Fruit",
+	"Falcon Fruit",
+	"Ice Fruit",
+	"Sand Fruit",
+	"Dark Fruit",
+	"Diamond Fruit",
+	"Light Fruit",
+	"Rubber Fruit",
+	"Barrier Fruit",
+	"Ghost Fruit",
+	"Magma Fruit",
+	"Quake Fruit",
+	"Buddha Fruit",
+	"Love Fruit",
+	"Spider Fruit",
+	"Sound Fruit",
+	"Phoenix Fruit",
+	"Portal Fruit",
+	"Rumble Fruit",
+	"Pain Fruit",
+	"Paw Fruit",
+	"Blizzard Fruit",
+	"Gravity Fruit",
+	"Mammoth Fruit",
+	"T-Rex Fruit",
+	"Dough Fruit",
+	"Shadow Fruit",
+	"Venom Fruit",
+	"Control Fruit",
+	"Gas Fruit",
+	"Spirit Fruit",
+	"Leopard Fruit",
+	"Yeti Fruit",
+	"Dragon Fruit",
+	"Kitsune Fruit"
+}
+
+local BloxFruitLookup = {}
+for _, fruitName in ipairs(BloxFruitNames) do
+	BloxFruitLookup[string.lower(fruitName)] = fruitName
+	local withoutSuffix = string.gsub(string.lower(fruitName), "%s*fruit%s*$", "")
+	if withoutSuffix ~= "" then
+		BloxFruitLookup[withoutSuffix] = fruitName
+	end
+end
+
 local TrackedPlayers = {}
 local TrackedNPCs = {}
 local TrackedChests = {}
@@ -93,24 +148,43 @@ local function isDemonicSoulEnemy(model)
 	return string.find(string.lower(tostring(model.Name)), "demonic soul") ~= nil
 end
 
-local function isFruitObject(obj)
+local function resolveBloxFruitName(rawName)
+	if not rawName then
+		return nil
+	end
+	local lower = string.lower(tostring(rawName))
+	lower = string.gsub(lower, "^%s*(.-)%s*$", "%1")
+	lower = string.gsub(lower, "%s+fruit%s+fruit%s*$", " fruit")
+	if BloxFruitLookup[lower] then
+		return BloxFruitLookup[lower]
+	end
+	local stripped = string.gsub(lower, "%s*fruit%s*$", "")
+	if BloxFruitLookup[stripped] then
+		return BloxFruitLookup[stripped]
+	end
+	for _, fullName in ipairs(BloxFruitNames) do
+		local fLower = string.lower(fullName)
+		local fBase = string.gsub(fLower, "%s*fruit%s*$", "")
+		if lower == fLower or lower == fBase or string.find(lower, fBase .. " fruit", 1, true) then
+			return fullName
+		end
+	end
+	return nil
+end
+
+local function isBloxFruitObject(obj)
 	if not obj or not obj.Name then
 		return false
 	end
 	if Players:GetPlayerFromCharacter(obj) or obj:FindFirstAncestorWhichIsA("Player") then
 		return false
 	end
-	local lower = string.lower(tostring(obj.Name))
-	if not string.find(lower, "fruit") then
+	local resolved = resolveBloxFruitName(obj.Name)
+	if not resolved then
 		return false
 	end
-	if obj:IsA("Tool") then
+	if obj:IsA("Tool") or obj:IsA("Model") or obj:IsA("BasePart") then
 		return true
-	end
-	if obj:IsA("Model") or obj:IsA("BasePart") then
-		if obj:FindFirstChildWhichIsA("TouchTransmitter", true) or obj:FindFirstChildWhichIsA("ClickDetector", true) or obj:FindFirstChildWhichIsA("ProximityPrompt", true) or obj:IsA("BasePart") then
-			return true
-		end
 	end
 	return false
 end
@@ -1173,26 +1247,22 @@ local function storeFruitsInInventory()
 		for _, cont in ipairs(containers) do
 			if cont then
 				for _, item in ipairs(cont:GetChildren()) do
-					if item:IsA("Tool") and string.find(string.lower(item.Name), "fruit") then
-						local fruitName = item.Name
-						local remotes = {}
-						for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-							if obj:IsA("RemoteFunction") or obj:IsA("RemoteEvent") then
-								local n = string.lower(obj.Name)
+					local resolvedFruit = item:IsA("Tool") and resolveBloxFruitName(item.Name) or nil
+					if resolvedFruit then
+						for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
+							if rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent") then
+								local n = string.lower(rem.Name)
 								if string.find(n, "store") or string.find(n, "fruit") or string.find(n, "inventory") or string.find(n, "commf") then
-									table.insert(remotes, obj)
+									if rem:IsA("RemoteFunction") then
+										pcall(function() rem:InvokeServer("StoreFruit", resolvedFruit, item) end)
+										pcall(function() rem:InvokeServer(resolvedFruit, item) end)
+										pcall(function() rem:InvokeServer("Store", resolvedFruit) end)
+									elseif rem:IsA("RemoteEvent") then
+										pcall(function() rem:FireServer("StoreFruit", resolvedFruit, item) end)
+										pcall(function() rem:FireServer(resolvedFruit, item) end)
+										pcall(function() rem:FireServer("Store", resolvedFruit) end)
+									end
 								end
-							end
-						end
-						for _, rem in ipairs(remotes) do
-							if rem:IsA("RemoteFunction") then
-								pcall(function() rem:InvokeServer("StoreFruit", fruitName, item) end)
-								pcall(function() rem:InvokeServer(fruitName, item) end)
-								pcall(function() rem:InvokeServer("Store", fruitName) end)
-							elseif rem:IsA("RemoteEvent") then
-								pcall(function() rem:FireServer("StoreFruit", fruitName, item) end)
-								pcall(function() rem:FireServer(fruitName, item) end)
-								pcall(function() rem:FireServer("Store", fruitName) end)
 							end
 						end
 					end
@@ -1229,10 +1299,10 @@ local function tryAutoRollFruit()
 end
 
 local function getNearestDroppedFruit(myPos)
-	local bestObj, bestPart, bestDist = nil, nil, math.huge
+	local bestObj, bestPart, bestDist, bestName = nil, nil, math.huge, nil
 	pcall(function()
 		for _, obj in ipairs(Workspace:GetDescendants()) do
-			if isFruitObject(obj) then
+			if isBloxFruitObject(obj) then
 				local part = getFruitAnchorPart(obj)
 				if part and part.Parent then
 					local d = (myPos - part.Position).Magnitude
@@ -1240,12 +1310,13 @@ local function getNearestDroppedFruit(myPos)
 						bestDist = d
 						bestObj = obj
 						bestPart = part
+						bestName = resolveBloxFruitName(obj.Name) or obj.Name
 					end
 				end
 			end
 		end
 	end)
-	return bestObj, bestPart, bestDist
+	return bestObj, bestPart, bestDist, bestName
 end
 
 task.spawn(function()
@@ -1260,9 +1331,9 @@ task.spawn(function()
 					return
 				end
 
-				local fruitObj, fruitPart, dist = getNearestDroppedFruit(root.Position)
+				local fruitObj, fruitPart, dist, fruitLabel = getNearestDroppedFruit(root.Position)
 				if fruitObj and fruitPart and fruitPart.Parent then
-					StatusLabel.Text = "●  Fruit: " .. tostring(fruitObj.Name) .. " [" .. tostring(math.floor(dist)) .. "m]"
+					StatusLabel.Text = "●  Fruit: " .. tostring(fruitLabel) .. " [" .. tostring(math.floor(dist)) .. "m]"
 					StatusLabel.TextColor3 = FruitColor
 
 					local goalCF = fruitPart.CFrame + Vector3.new(0, 1.5, 0)
@@ -1293,7 +1364,7 @@ task.spawn(function()
 						end
 					end
 				else
-					StatusLabel.Text = "●  Auto Get Fruits: Scanning Map..."
+					StatusLabel.Text = "●  Auto Get Fruits: Scanning Blox Fruits..."
 					StatusLabel.TextColor3 = AccentGlow
 				end
 			end)
@@ -2126,7 +2197,7 @@ if Drawing then
 
 	local function addFruit(obj)
 		pcall(function()
-			if TrackedFruits[obj] or not isFruitObject(obj) then
+			if TrackedFruits[obj] or not isBloxFruitObject(obj) then
 				return
 			end
 			local part = getFruitAnchorPart(obj)
@@ -2136,7 +2207,7 @@ if Drawing then
 			TrackedFruits[obj] = {
 				Object = obj,
 				Part = part,
-				Label = tostring(obj.Name),
+				Label = resolveBloxFruitName(obj.Name) or tostring(obj.Name),
 				Text = createDrawing("Text", {Size = 12, Center = true, Outline = true, Color = FruitColor, Visible = false})
 			}
 		end)
@@ -2165,7 +2236,7 @@ if Drawing then
 	local function scanFolder(folder)
 		pcall(function()
 			for _, obj in ipairs(folder:GetChildren()) do
-				if isFruitObject(obj) then
+				if isBloxFruitObject(obj) then
 					addFruit(obj)
 				end
 				if obj:IsA("Model") then
@@ -2177,7 +2248,7 @@ if Drawing then
 						if isValidChestPart(desc) then
 							addChest(desc)
 						end
-						if isFruitObject(desc) then
+						if isBloxFruitObject(desc) then
 							addFruit(desc)
 						end
 					end
@@ -2197,17 +2268,17 @@ if Drawing then
 			if obj:IsA("Model") then
 				task.wait(0.2)
 				addNPC(obj)
-				if isFruitObject(obj) then
+				if isBloxFruitObject(obj) then
 					addFruit(obj)
 				end
 			elseif obj:IsA("BasePart") then
 				task.wait(0.1)
 				if isValidChestPart(obj) then
 					addChest(obj)
-				elseif isFruitObject(obj) then
+				elseif isBloxFruitObject(obj) then
 					addFruit(obj)
 				end
-			elseif obj:IsA("Tool") and isFruitObject(obj) then
+			elseif obj:IsA("Tool") and isBloxFruitObject(obj) then
 				task.wait(0.1)
 				addFruit(obj)
 			end
