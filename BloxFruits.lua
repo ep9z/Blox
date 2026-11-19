@@ -3,12 +3,6 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
-local VirtualUser = game:GetService("VirtualUser")
-
-local VirtualInputManager = nil
-pcall(function()
-	VirtualInputManager = game:GetService("VirtualInputManager")
-end)
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
@@ -787,7 +781,7 @@ local function hasActiveQuest()
 	return ok and active or false
 end
 
-local function equipWeapon()
+local function ensureEquippedIfNone()
 	pcall(function()
 		local char = LocalPlayer.Character
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -798,34 +792,16 @@ local function equipWeapon()
 		if char:FindFirstChildOfClass("Tool") then
 			return
 		end
-		for _, tool in ipairs(backpack:GetChildren()) do
-			if tool:IsA("Tool") then
-				hum:EquipTool(tool)
-				break
-			end
+		local firstTool = backpack:FindFirstChildOfClass("Tool")
+		if firstTool then
+			hum:EquipTool(firstTool)
 		end
 	end)
 end
 
-local function isPointerOverUI()
-	local ok, over = pcall(function()
-		if not MainFrame.Visible then
-			return false
-		end
-		local mousePos = UserInputService:GetMouseLocation()
-		local topLeft = MainFrame.AbsolutePosition
-		local bottomRight = topLeft + MainFrame.AbsoluteSize
-		return mousePos.X >= topLeft.X and mousePos.X <= bottomRight.X and mousePos.Y >= topLeft.Y and mousePos.Y <= bottomRight.Y
-	end)
-	return ok and over or false
-end
-
-local function triggerHit(char, targetPart)
-	if isPointerOverUI() then
-		return
-	end
+local function triggerHit(char)
 	local now = tick()
-	if (now - LastHitTick) < 0.08 then
+	if (now - LastHitTick) < 0.09 then
 		return
 	end
 	LastHitTick = now
@@ -833,23 +809,6 @@ local function triggerHit(char, targetPart)
 		local tool = char and char:FindFirstChildOfClass("Tool")
 		if tool then
 			tool:Activate()
-		end
-		local clickX = Camera.ViewportSize.X * 0.5
-		local clickY = Camera.ViewportSize.Y * 0.5
-		if targetPart and targetPart:IsA("BasePart") then
-			local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
-			if onScreen and screenPos.X > 0 and screenPos.X < Camera.ViewportSize.X and screenPos.Y > 0 and screenPos.Y < Camera.ViewportSize.Y then
-				clickX = screenPos.X
-				clickY = screenPos.Y
-			end
-		end
-		if VirtualInputManager then
-			VirtualInputManager:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1)
-			task.wait(0.02)
-			VirtualInputManager:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1)
-		else
-			VirtualUser:CaptureController()
-			VirtualUser:ClickButton1(Vector2.new(clickX, clickY))
 		end
 	end)
 end
@@ -1053,7 +1012,7 @@ local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefi
 		root.AssemblyAngularVelocity = Vector3.zero
 		bringMobsUnderPlayer(root.Position, tRoot)
 		if dist <= 18 then
-			triggerHit(char, tRoot)
+			triggerHit(char)
 		end
 		return true
 	end
@@ -1073,7 +1032,7 @@ task.spawn(function()
 				end
 
 				local myLvl = getPlayerLevel()
-				equipWeapon()
+				ensureEquippedIfNone()
 
 				if FarmVampireEnabled then
 					local vampEnemy, vRoot, vHum = getNearestByPredicate(root.Position, isVampireEnemy)
@@ -1232,8 +1191,8 @@ task.spawn(function()
 							if isSeaEvent(model.Name) then
 								local dist = (myRoot.Position - esp.Root.Position).Magnitude
 								if dist < 250 then
-									equipWeapon()
-									triggerHit(myChar, esp.Root)
+									ensureEquippedIfNone()
+									triggerHit(myChar)
 									break
 								end
 							end
