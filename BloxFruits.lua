@@ -30,6 +30,8 @@ local LockedSailDir = nil
 local BoatNoclipEnabled = false
 local AutoChestEnabled = false
 local AutoAttackSeaEnabled = false
+local WalkSpeedEnabled = false
+local TargetWalkSpeed = 100
 local AutoQuestFarmEnabled = false
 local FarmVampireEnabled = false
 local FarmDemonicSoulEnabled = false
@@ -231,6 +233,13 @@ ExitBtn.MouseButton1Click:Connect(function()
 	ScriptRunning = false
 	LockedSailDir = nil
 	pcall(function()
+		local char = LocalPlayer.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			hum.WalkSpeed = 16
+		end
+	end)
+	pcall(function()
 		if CurrentTween then
 			CurrentTween:Cancel()
 		end
@@ -331,7 +340,7 @@ Container3.Position = Container1.Position
 Container3.BackgroundTransparency = 1
 Container3.ScrollBarThickness = 3
 Container3.ScrollBarImageColor3 = ThemeColor
-Container3.CanvasSize = UDim2.new(0, 0, 0, 100)
+Container3.CanvasSize = UDim2.new(0, 0, 0, 150)
 Container3.Visible = false
 Container3.Parent = MainFrame
 
@@ -347,7 +356,7 @@ Container4.Parent = MainFrame
 
 local tab1Btn = createTabButton("Sea & Chests", 1, 4)
 local tab2Btn = createTabButton("Auto Farm", 2, 4)
-local tab3Btn = createTabButton("Combat", 3, 4)
+local tab3Btn = createTabButton("Player", 3, 4)
 local tab4Btn = createTabButton("Visuals", 4, 4)
 
 tab1Btn.BackgroundTransparency = 0
@@ -710,18 +719,36 @@ end)
 createToggle(Container2, "Auto Quest (Level Based)", 152, true, function(state)
 	AutoQuestEnabled = state
 end)
-createSlider(Container2, 190, "Player Speed", 16, 800, FlySpeed, function(val)
+createSlider(Container2, 190, "Farm Fly Speed", 60, 800, FlySpeed, function(val)
 	FlySpeed = val
+end)
+
+createToggle(Container3, "Walk Speed Boost", 0, false, function(state)
+	WalkSpeedEnabled = state
 	pcall(function()
 		local char = LocalPlayer.Character
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
 		if hum then
-			hum.WalkSpeed = val
+			hum.WalkSpeed = state and TargetWalkSpeed or 16
 		end
 	end)
 end)
+createSlider(Container3, 38, "Walk Speed", 16, 350, TargetWalkSpeed, function(val)
+	TargetWalkSpeed = val
+	if WalkSpeedEnabled then
+		pcall(function()
+			local char = LocalPlayer.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if hum then
+				hum.WalkSpeed = val
+			end
+		end)
+	end
+end)
+createToggle(Container3, "Auto Attack Sea Beast / Shark", 88, false, function(state)
+	AutoAttackSeaEnabled = state
+end)
 
-createToggle(Container3, "Auto Attack Sea Beast / Shark", 0, false, function(state) AutoAttackSeaEnabled = state end)
 createToggle(Container4, "ESP (Players & Sea)", 0, true, function(state) ESPEnabled = state end)
 createToggle(Container4, "ESP (Chests)", 38, false, function(state) ChestESPEnabled = state end)
 
@@ -731,6 +758,30 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		OpenPill.Visible = not MainFrame.Visible
 	end
 end)
+
+local function bindWalkSpeedGuard(char)
+	pcall(function()
+		if not char then
+			return
+		end
+		local hum = char:WaitForChild("Humanoid", 5)
+		if hum then
+			hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+				if ScriptRunning and WalkSpeedEnabled and hum.WalkSpeed ~= TargetWalkSpeed then
+					hum.WalkSpeed = TargetWalkSpeed
+				end
+			end)
+			if WalkSpeedEnabled then
+				hum.WalkSpeed = TargetWalkSpeed
+			end
+		end
+	end)
+end
+
+if LocalPlayer.Character then
+	bindWalkSpeedGuard(LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(bindWalkSpeedGuard)
 
 local function getPlayerLevel()
 	local ok, lvl = pcall(function()
@@ -1043,7 +1094,7 @@ local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefi
 		local dist = (root.Position - targetPos).Magnitude
 
 		if dist > 6.5 then
-			local duration = math.clamp(dist / math.max(FlySpeed, 16), 0.03, 4)
+			local duration = math.clamp(dist / math.max(FlySpeed, 60), 0.04, 2.5)
 			if CurrentTween then
 				pcall(function() CurrentTween:Cancel() end)
 			end
@@ -1110,7 +1161,7 @@ task.spawn(function()
 						local targetQPos = qPart.Position + Vector3.new(0, 2, -4)
 						local d = (root.Position - targetQPos).Magnitude
 						if d > 8 then
-							local dur = math.clamp(d / math.max(FlySpeed, 16), 0.05, 4)
+							local dur = math.clamp(d / math.max(FlySpeed, 60), 0.05, 3)
 							if CurrentTween then
 								pcall(function() CurrentTween:Cancel() end)
 							end
@@ -1355,8 +1406,8 @@ RunService.Stepped:Connect(function()
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		local root = char:FindFirstChild("HumanoidRootPart")
 
-		if hum and hasActiveTargetFarm() and hum.WalkSpeed ~= FlySpeed then
-			hum.WalkSpeed = FlySpeed
+		if hum and WalkSpeedEnabled and hum.WalkSpeed ~= TargetWalkSpeed then
+			hum.WalkSpeed = TargetWalkSpeed
 		end
 
 		if AutoSailEnabled and hum and hum.SeatPart and root and LockedSailDir then
@@ -1548,6 +1599,10 @@ if Drawing then
 			local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
 			local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
 			local viewportCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+
+			if myHum and WalkSpeedEnabled and myHum.WalkSpeed ~= TargetWalkSpeed then
+				myHum.WalkSpeed = TargetWalkSpeed
+			end
 
 			if BoatSpeedEnabled and myHum and myHum.SeatPart and myHum.SeatPart:IsA("VehicleSeat") then
 				myHum.SeatPart.MaxSpeed = TargetBoatSpeed
