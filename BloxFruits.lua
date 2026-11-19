@@ -111,8 +111,9 @@ local BloxFruitNames = {
 
 local BloxFruitLookup = {}
 for _, fruitName in ipairs(BloxFruitNames) do
-	BloxFruitLookup[string.lower(fruitName)] = fruitName
-	local withoutSuffix = string.gsub(string.lower(fruitName), "%s*fruit%s*$", "")
+	local lower = string.lower(fruitName)
+	BloxFruitLookup[lower] = fruitName
+	local withoutSuffix = string.gsub(lower, "%s*fruit%s*$", "")
 	if withoutSuffix ~= "" then
 		BloxFruitLookup[withoutSuffix] = fruitName
 	end
@@ -165,26 +166,34 @@ local function resolveBloxFruitName(rawName)
 	for _, fullName in ipairs(BloxFruitNames) do
 		local fLower = string.lower(fullName)
 		local fBase = string.gsub(fLower, "%s*fruit%s*$", "")
-		if lower == fLower or lower == fBase or string.find(lower, fBase .. " fruit", 1, true) then
+		if lower == fLower or lower == fBase then
 			return fullName
 		end
 	end
 	return nil
 end
 
-local function isBloxFruitObject(obj)
-	if not obj or not obj.Name then
+local function isPickupableFruitInstance(obj)
+	if not obj or not obj.Name or not obj.Parent then
 		return false
 	end
 	if Players:GetPlayerFromCharacter(obj) or obj:FindFirstAncestorWhichIsA("Player") then
 		return false
 	end
-	local resolved = resolveBloxFruitName(obj.Name)
-	if not resolved then
+	if not resolveBloxFruitName(obj.Name) then
 		return false
 	end
-	if obj:IsA("Tool") or obj:IsA("Model") or obj:IsA("BasePart") then
+	if obj:IsA("Tool") then
 		return true
+	end
+	if obj:IsA("Model") then
+		if obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("TouchTransmitter", true) or obj:FindFirstChildWhichIsA("ProximityPrompt", true) or obj:FindFirstChildWhichIsA("ClickDetector", true) then
+			return true
+		end
+	elseif obj:IsA("BasePart") then
+		if obj.Name == "Handle" or obj:FindFirstChildWhichIsA("TouchTransmitter", true) or obj:FindFirstChildWhichIsA("ProximityPrompt", true) or obj:FindFirstChildWhichIsA("ClickDetector", true) then
+			return true
+		end
 	end
 	return false
 end
@@ -197,7 +206,7 @@ local function getFruitAnchorPart(obj)
 		return obj
 	end
 	if obj:IsA("Model") then
-		return obj.PrimaryPart or obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart", true)
+		return obj:FindFirstChild("Handle") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
 	end
 	if obj:IsA("Tool") then
 		return obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart", true)
@@ -1302,7 +1311,7 @@ local function getNearestDroppedFruit(myPos)
 	local bestObj, bestPart, bestDist, bestName = nil, nil, math.huge, nil
 	pcall(function()
 		for _, obj in ipairs(Workspace:GetDescendants()) do
-			if isBloxFruitObject(obj) then
+			if isPickupableFruitInstance(obj) then
 				local part = getFruitAnchorPart(obj)
 				if part and part.Parent then
 					local d = (myPos - part.Position).Magnitude
@@ -2197,7 +2206,7 @@ if Drawing then
 
 	local function addFruit(obj)
 		pcall(function()
-			if TrackedFruits[obj] or not isBloxFruitObject(obj) then
+			if TrackedFruits[obj] or not isPickupableFruitInstance(obj) then
 				return
 			end
 			local part = getFruitAnchorPart(obj)
@@ -2236,7 +2245,7 @@ if Drawing then
 	local function scanFolder(folder)
 		pcall(function()
 			for _, obj in ipairs(folder:GetChildren()) do
-				if isBloxFruitObject(obj) then
+				if isPickupableFruitInstance(obj) then
 					addFruit(obj)
 				end
 				if obj:IsA("Model") then
@@ -2248,7 +2257,7 @@ if Drawing then
 						if isValidChestPart(desc) then
 							addChest(desc)
 						end
-						if isBloxFruitObject(desc) then
+						if isPickupableFruitInstance(desc) then
 							addFruit(desc)
 						end
 					end
@@ -2268,17 +2277,17 @@ if Drawing then
 			if obj:IsA("Model") then
 				task.wait(0.2)
 				addNPC(obj)
-				if isBloxFruitObject(obj) then
+				if isPickupableFruitInstance(obj) then
 					addFruit(obj)
 				end
 			elseif obj:IsA("BasePart") then
 				task.wait(0.1)
 				if isValidChestPart(obj) then
 					addChest(obj)
-				elseif isBloxFruitObject(obj) then
+				elseif isPickupableFruitInstance(obj) then
 					addFruit(obj)
 				end
-			elseif obj:IsA("Tool") and isBloxFruitObject(obj) then
+			elseif obj:IsA("Tool") and isPickupableFruitInstance(obj) then
 				task.wait(0.1)
 				addFruit(obj)
 			end
@@ -2399,7 +2408,7 @@ if Drawing then
 			end
 
 			for obj, esp in pairs(TrackedFruits) do
-				if not obj.Parent or not esp.Part or not esp.Part.Parent then
+				if not obj.Parent or not esp.Part or not esp.Part.Parent or not isPickupableFruitInstance(obj) then
 					removeFruit(obj)
 				elseif not FruitESPEnabled or not esp.Text then
 					if esp.Text then
