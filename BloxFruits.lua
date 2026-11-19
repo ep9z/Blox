@@ -40,6 +40,7 @@ local FlySpeed = 280
 local BringRadius = 220
 local CurrentTween = nil
 local ScriptRunning = true
+local LastHitTick = 0
 
 local AllowedChestNames = {
 	"GoldChest",
@@ -800,23 +801,36 @@ local function isPointerOverUI()
 	return ok and over or false
 end
 
-local function triggerHit(char)
+local function triggerHit(char, targetPart)
 	if isPointerOverUI() then
 		return
 	end
+	local now = tick()
+	if (now - LastHitTick) < 0.08 then
+		return
+	end
+	LastHitTick = now
 	pcall(function()
 		local tool = char and char:FindFirstChildOfClass("Tool")
 		if tool then
 			tool:Activate()
 		end
+		local clickX = Camera.ViewportSize.X * 0.5
+		local clickY = Camera.ViewportSize.Y * 0.5
+		if targetPart and targetPart:IsA("BasePart") then
+			local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+			if onScreen and screenPos.X > 0 and screenPos.X < Camera.ViewportSize.X and screenPos.Y > 0 and screenPos.Y < Camera.ViewportSize.Y then
+				clickX = screenPos.X
+				clickY = screenPos.Y
+			end
+		end
 		if VirtualInputManager then
-			local x = Camera.ViewportSize.X * 0.5
-			local y = Camera.ViewportSize.Y * 0.5
-			VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
-			VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+			VirtualInputManager:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1)
+			task.wait(0.02)
+			VirtualInputManager:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1)
 		else
 			VirtualUser:CaptureController()
-			VirtualUser:ClickButton1(Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5))
+			VirtualUser:ClickButton1(Vector2.new(clickX, clickY))
 		end
 	end)
 end
@@ -965,7 +979,7 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot)
 		if not enemiesFolder then
 			return
 		end
-		local stackPos = mainEnemyRoot and mainEnemyRoot.Position or (centerPos + Vector3.new(0, -8.5, 0))
+		local stackPos = mainEnemyRoot and mainEnemyRoot.Position or (centerPos + Vector3.new(0, -6.5, 0))
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 			if enemy:IsA("Model") then
 				local eRoot = enemy:FindFirstChild("HumanoidRootPart")
@@ -1012,11 +1026,11 @@ task.spawn(function()
 						StatusLabel.Text = "●  Fangs Farm: " .. tostring(vampEnemy.Name) .. lvlTag
 						StatusLabel.TextColor3 = Color3.fromRGB(244, 63, 94)
 
-						local targetPos = vRoot.Position + Vector3.new(0, 8.5, 0)
+						local targetPos = vRoot.Position + Vector3.new(0, 6.5, 0)
 						local lookCF = CFrame.lookAt(targetPos, vRoot.Position)
 						local dist = (root.Position - targetPos).Magnitude
 
-						if dist > 8.5 then
+						if dist > 6.5 then
 							local duration = math.clamp(dist / math.max(FlySpeed, 60), 0.04, 2.5)
 							if CurrentTween then
 								pcall(function() CurrentTween:Cancel() end)
@@ -1029,13 +1043,14 @@ task.spawn(function()
 								CurrentTween = nil
 							end
 							root.CFrame = lookCF
+							Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, vRoot.Position)
 						end
 
 						root.AssemblyLinearVelocity = Vector3.zero
 						root.AssemblyAngularVelocity = Vector3.zero
 						bringMobsUnderPlayer(root.Position, vRoot)
-						if dist <= 26 then
-							triggerHit(char)
+						if dist <= 18 then
+							triggerHit(char, vRoot)
 						end
 					else
 						StatusLabel.Text = "●  Searching Vampire (Fangs)..."
@@ -1071,11 +1086,11 @@ task.spawn(function()
 					StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Farm: " .. tostring(mainEnemy.Name) .. lvlTag
 					StatusLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
 
-					local targetPos = eRoot.Position + Vector3.new(0, 8.5, 0)
+					local targetPos = eRoot.Position + Vector3.new(0, 6.5, 0)
 					local lookCF = CFrame.lookAt(targetPos, eRoot.Position)
 					local dist = (root.Position - targetPos).Magnitude
 
-					if dist > 8.5 then
+					if dist > 6.5 then
 						local duration = math.clamp(dist / math.max(FlySpeed, 60), 0.04, 2.5)
 						if CurrentTween then
 							pcall(function() CurrentTween:Cancel() end)
@@ -1088,13 +1103,14 @@ task.spawn(function()
 							CurrentTween = nil
 						end
 						root.CFrame = lookCF
+						Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, eRoot.Position)
 					end
 
 					root.AssemblyLinearVelocity = Vector3.zero
 					root.AssemblyAngularVelocity = Vector3.zero
 					bringMobsUnderPlayer(root.Position, eRoot)
-					if dist <= 26 then
-						triggerHit(char)
+					if dist <= 18 then
+						triggerHit(char, eRoot)
 					end
 				else
 					StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Searching Level Mobs..."
@@ -1215,7 +1231,7 @@ task.spawn(function()
 								local dist = (myRoot.Position - esp.Root.Position).Magnitude
 								if dist < 250 then
 									equipWeapon()
-									triggerHit(myChar)
+									triggerHit(myChar, esp.Root)
 									break
 								end
 							end
