@@ -117,10 +117,10 @@ local function applyDeviceLayout()
 	isMobile = (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) or vp.X < 750
 
 	if isMobile then
-		MainFrame.Size = UDim2.new(0, 280, 0, 345)
+		MainFrame.Size = UDim2.new(0, 310, 0, 355)
 		UIScale.Scale = math.clamp(vp.Y / 480, 0.72, 0.96)
 	else
-		MainFrame.Size = UDim2.new(0, 370, 0, 420)
+		MainFrame.Size = UDim2.new(0, 390, 0, 425)
 		UIScale.Scale = math.clamp(vp.Y / 900, 0.88, 1.15)
 	end
 end
@@ -294,29 +294,44 @@ StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 StatusLabel.Parent = StatusCard
 
 local TabBar = Instance.new("Frame")
-TabBar.Size = UDim2.new(1, -20, 0, 30)
+TabBar.Size = UDim2.new(1, -20, 0, 32)
 TabBar.Position = UDim2.new(0, 10, 0, topOffset + 40)
 TabBar.BackgroundColor3 = CardDark
 TabBar.BorderSizePixel = 0
+TabBar.ClipsDescendants = true
 TabBar.Parent = MainFrame
 Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 8)
 
-local function createTabButton(name, index, total)
+local tabLayout = Instance.new("UIListLayout")
+tabLayout.FillDirection = Enum.FillDirection.Horizontal
+tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+tabLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+tabLayout.Padding = UDim.new(0, 3)
+tabLayout.Parent = TabBar
+
+local tabPadding = Instance.new("UIPadding")
+tabPadding.PaddingLeft = UDim.new(0, 3)
+tabPadding.PaddingRight = UDim.new(0, 3)
+tabPadding.PaddingTop = UDim.new(0, 3)
+tabPadding.PaddingBottom = UDim.new(0, 3)
+tabPadding.Parent = TabBar
+
+local function createTabButton(name, total)
 	local tabBtn = Instance.new("TextButton")
-	tabBtn.Size = UDim2.new(1 / total, -4, 1, -4)
-	tabBtn.Position = UDim2.new((index - 1) / total, 2, 0, 2)
+	tabBtn.Size = UDim2.new(1 / total, -3, 1, 0)
 	tabBtn.BackgroundColor3 = Color3.fromRGB(24, 21, 38)
 	tabBtn.BackgroundTransparency = 1
 	tabBtn.Text = name
 	tabBtn.TextColor3 = TextMuted
 	tabBtn.Font = Enum.Font.GothamBold
-	tabBtn.TextSize = 9
+	tabBtn.TextSize = 9.5
+	tabBtn.TextScaled = false
 	tabBtn.Parent = TabBar
 	Instance.new("UICorner", tabBtn).CornerRadius = UDim.new(0, 6)
 	return tabBtn
 end
 
-local bodyTop = topOffset + 78
+local bodyTop = topOffset + 80
 local Container1 = Instance.new("ScrollingFrame")
 Container1.Size = UDim2.new(1, -20, 1, -(bodyTop + 10))
 Container1.Position = UDim2.new(0, 10, 0, bodyTop)
@@ -367,11 +382,11 @@ Container5.CanvasSize = UDim2.new(0, 0, 0, 235)
 Container5.Visible = false
 Container5.Parent = MainFrame
 
-local tab1Btn = createTabButton("Sea", 1, 5)
-local tab2Btn = createTabButton("Farm", 2, 5)
-local tab3Btn = createTabButton("Player", 3, 5)
-local tab4Btn = createTabButton("Visuals", 4, 5)
-local tab5Btn = createTabButton("PvP", 5, 5)
+local tab1Btn = createTabButton("Sea", 5)
+local tab2Btn = createTabButton("Farm", 5)
+local tab3Btn = createTabButton("Player", 5)
+local tab4Btn = createTabButton("Visuals", 5)
+local tab5Btn = createTabButton("PvP", 5)
 
 tab1Btn.BackgroundTransparency = 0
 tab1Btn.BackgroundColor3 = ThemeColor
