@@ -89,9 +89,10 @@ end
 
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 pcall(function()
-	local old = playerGui:FindFirstChild("NexoaroController")
-	if old then
-		old:Destroy()
+	for _, gui in ipairs(playerGui:GetChildren()) do
+		if gui.Name == "NexoaroController" then
+			gui:Destroy()
+		end
 	end
 end)
 
