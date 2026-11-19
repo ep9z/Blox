@@ -39,6 +39,9 @@ local BringMobsEnabled = true
 local AutoQuestEnabled = true
 local ESPEnabled = true
 local ChestESPEnabled = false
+local PvPEnabled = false
+local PvPSpeed = 320
+local SelectedPvPPlayer = nil
 local FlySpeed = 280
 local BringRadius = 220
 local CurrentTween = nil
@@ -307,7 +310,7 @@ local function createTabButton(name, index, total)
 	tabBtn.Text = name
 	tabBtn.TextColor3 = TextMuted
 	tabBtn.Font = Enum.Font.GothamBold
-	tabBtn.TextSize = 9.5
+	tabBtn.TextSize = 9
 	tabBtn.Parent = TabBar
 	Instance.new("UICorner", tabBtn).CornerRadius = UDim.new(0, 6)
 	return tabBtn
@@ -354,20 +357,31 @@ Container4.CanvasSize = UDim2.new(0, 0, 0, 120)
 Container4.Visible = false
 Container4.Parent = MainFrame
 
-local tab1Btn = createTabButton("Sea & Chests", 1, 4)
-local tab2Btn = createTabButton("Auto Farm", 2, 4)
-local tab3Btn = createTabButton("Player", 3, 4)
-local tab4Btn = createTabButton("Visuals", 4, 4)
+local Container5 = Instance.new("ScrollingFrame")
+Container5.Size = Container1.Size
+Container5.Position = Container1.Position
+Container5.BackgroundTransparency = 1
+Container5.ScrollBarThickness = 3
+Container5.ScrollBarImageColor3 = ThemeColor
+Container5.CanvasSize = UDim2.new(0, 0, 0, 235)
+Container5.Visible = false
+Container5.Parent = MainFrame
+
+local tab1Btn = createTabButton("Sea", 1, 5)
+local tab2Btn = createTabButton("Farm", 2, 5)
+local tab3Btn = createTabButton("Player", 3, 5)
+local tab4Btn = createTabButton("Visuals", 4, 5)
+local tab5Btn = createTabButton("PvP", 5, 5)
 
 tab1Btn.BackgroundTransparency = 0
 tab1Btn.BackgroundColor3 = ThemeColor
 tab1Btn.TextColor3 = Color3.new(1, 1, 1)
 
 local function switchTab(activeBtn, activeContainer)
-	for _, c in ipairs({Container1, Container2, Container3, Container4}) do
+	for _, c in ipairs({Container1, Container2, Container3, Container4, Container5}) do
 		c.Visible = false
 	end
-	for _, b in ipairs({tab1Btn, tab2Btn, tab3Btn, tab4Btn}) do
+	for _, b in ipairs({tab1Btn, tab2Btn, tab3Btn, tab4Btn, tab5Btn}) do
 		b.BackgroundTransparency = 1
 		b.TextColor3 = TextMuted
 	end
@@ -381,6 +395,7 @@ tab1Btn.MouseButton1Click:Connect(function() switchTab(tab1Btn, Container1) end)
 tab2Btn.MouseButton1Click:Connect(function() switchTab(tab2Btn, Container2) end)
 tab3Btn.MouseButton1Click:Connect(function() switchTab(tab3Btn, Container3) end)
 tab4Btn.MouseButton1Click:Connect(function() switchTab(tab4Btn, Container4) end)
+tab5Btn.MouseButton1Click:Connect(function() switchTab(tab5Btn, Container5) end)
 
 local function makeDraggable(handle, target)
 	local dragging, dragStart, startPos = false, nil, nil
@@ -752,6 +767,164 @@ end)
 createToggle(Container4, "ESP (Players & Sea)", 0, true, function(state) ESPEnabled = state end)
 createToggle(Container4, "ESP (Chests)", 38, false, function(state) ChestESPEnabled = state end)
 
+createToggle(Container5, "Auto Kill Target", 0, false, function(state)
+	PvPEnabled = state
+	if not state then
+		pcall(function()
+			if CurrentTween then
+				CurrentTween:Cancel()
+				CurrentTween = nil
+			end
+		end)
+		StatusLabel.Text = "●  Status: Ready"
+		StatusLabel.TextColor3 = TextMuted
+	end
+end)
+
+local TargetCard = Instance.new("Frame")
+TargetCard.Size = UDim2.new(1, -6, 0, 34)
+TargetCard.Position = UDim2.new(0, 2, 0, 38)
+TargetCard.BackgroundColor3 = CardDark
+TargetCard.BorderSizePixel = 0
+TargetCard.Parent = Container5
+Instance.new("UICorner", TargetCard).CornerRadius = UDim.new(0, 8)
+local targetStroke = Instance.new("UIStroke", TargetCard)
+targetStroke.Color = Color3.fromRGB(42, 36, 64)
+targetStroke.Thickness = 1
+
+local TargetLabel = Instance.new("TextLabel")
+TargetLabel.Size = UDim2.new(1, -86, 1, 0)
+TargetLabel.Position = UDim2.new(0, 10, 0, 0)
+TargetLabel.BackgroundTransparency = 1
+TargetLabel.Text = "Target: None"
+TargetLabel.TextColor3 = TextMain
+TargetLabel.Font = Enum.Font.GothamSemibold
+TargetLabel.TextSize = 10
+TargetLabel.TextXAlignment = Enum.TextXAlignment.Left
+TargetLabel.TextTruncate = Enum.TextTruncate.AtEnd
+TargetLabel.Parent = TargetCard
+
+local NextTargetBtn = Instance.new("TextButton")
+NextTargetBtn.Size = UDim2.new(0, 68, 0, 22)
+NextTargetBtn.Position = UDim2.new(1, -74, 0.5, -11)
+NextTargetBtn.BackgroundColor3 = ThemeColor
+NextTargetBtn.Text = "Next Player"
+NextTargetBtn.TextColor3 = Color3.new(1, 1, 1)
+NextTargetBtn.Font = Enum.Font.GothamBold
+NextTargetBtn.TextSize = 9.5
+NextTargetBtn.Parent = TargetCard
+Instance.new("UICorner", NextTargetBtn).CornerRadius = UDim.new(0, 6)
+
+createSlider(Container5, 78, "PvP Follow Speed", 80, 900, PvPSpeed, function(val)
+	PvPSpeed = val
+end)
+
+local PlayerListFrame = Instance.new("ScrollingFrame")
+PlayerListFrame.Size = UDim2.new(1, -6, 0, 102)
+PlayerListFrame.Position = UDim2.new(0, 2, 0, 126)
+PlayerListFrame.BackgroundColor3 = CardDark
+PlayerListFrame.BorderSizePixel = 0
+PlayerListFrame.ScrollBarThickness = 2
+PlayerListFrame.ScrollBarImageColor3 = ThemeColor
+PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+PlayerListFrame.Parent = Container5
+Instance.new("UICorner", PlayerListFrame).CornerRadius = UDim.new(0, 8)
+local listStroke = Instance.new("UIStroke", PlayerListFrame)
+listStroke.Color = Color3.fromRGB(42, 36, 64)
+listStroke.Thickness = 1
+
+local function selectPvPPlayer(plr)
+	SelectedPvPPlayer = plr
+	if plr and plr.Parent then
+		TargetLabel.Text = "Target: " .. tostring(plr.Name)
+		TargetLabel.TextColor3 = AccentGlow
+	else
+		TargetLabel.Text = "Target: None"
+		TargetLabel.TextColor3 = TextMuted
+	end
+end
+
+local function refreshPlayerList()
+	pcall(function()
+		for _, child in ipairs(PlayerListFrame:GetChildren()) do
+			if child:IsA("TextButton") then
+				child:Destroy()
+			end
+		end
+
+		local others = {}
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LocalPlayer then
+				table.insert(others, p)
+			end
+		end
+
+		if SelectedPvPPlayer and (not SelectedPvPPlayer.Parent or SelectedPvPPlayer == LocalPlayer) then
+			SelectedPvPPlayer = others[1]
+			selectPvPPlayer(SelectedPvPPlayer)
+		elseif not SelectedPvPPlayer and #others > 0 then
+			selectPvPPlayer(others[1])
+		end
+
+		for i, p in ipairs(others) do
+			local btn = Instance.new("TextButton")
+			btn.Size = UDim2.new(1, -10, 0, 24)
+			btn.Position = UDim2.new(0, 5, 0, 4 + ((i - 1) * 28))
+			local isSel = (p == SelectedPvPPlayer)
+			btn.BackgroundColor3 = isSel and ThemeColor or Color3.fromRGB(26, 22, 42)
+			btn.Text = (isSel and "▶ " or "") .. tostring(p.Name)
+			btn.TextColor3 = isSel and Color3.new(1, 1, 1) or TextMain
+			btn.Font = Enum.Font.GothamSemibold
+			btn.TextSize = 9.5
+			btn.TextXAlignment = Enum.TextXAlignment.Left
+			btn.Parent = PlayerListFrame
+			Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+			btn.MouseButton1Click:Connect(function()
+				selectPvPPlayer(p)
+				refreshPlayerList()
+			end)
+		end
+
+		PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(20, 8 + (#others * 28)))
+	end)
+end
+
+NextTargetBtn.MouseButton1Click:Connect(function()
+	local others = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer then
+			table.insert(others, p)
+		end
+	end
+	if #others == 0 then
+		selectPvPPlayer(nil)
+		refreshPlayerList()
+		return
+	end
+	local nextIdx = 1
+	for i, p in ipairs(others) do
+		if p == SelectedPvPPlayer then
+			nextIdx = (i % #others) + 1
+			break
+		end
+	end
+	selectPvPPlayer(others[nextIdx])
+	refreshPlayerList()
+end)
+
+Players.PlayerAdded:Connect(function()
+	task.wait(0.2)
+	refreshPlayerList()
+end)
+Players.PlayerRemoving:Connect(function(plr)
+	if plr == SelectedPvPPlayer then
+		SelectedPvPPlayer = nil
+	end
+	refreshPlayerList()
+end)
+refreshPlayerList()
+
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if not gameProcessed and input.KeyCode == Enum.KeyCode.RightShift then
 		MainFrame.Visible = not MainFrame.Visible
@@ -913,6 +1086,68 @@ local function triggerHit(char)
 		end
 	end)
 end
+
+task.spawn(function()
+	while ScriptRunning do
+		task.wait(0.04)
+		if PvPEnabled then
+			pcall(function()
+				local char = LocalPlayer.Character
+				local root = char and char:FindFirstChild("HumanoidRootPart")
+				local hum = char and char:FindFirstChildOfClass("Humanoid")
+				if not root or not hum or hum.Health <= 0 then
+					return
+				end
+
+				local targetPlr = SelectedPvPPlayer
+				if not targetPlr or not targetPlr.Parent or targetPlr == LocalPlayer then
+					StatusLabel.Text = "●  PvP: Select a Player"
+					StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+					return
+				end
+
+				local tChar = targetPlr.Character
+				local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+				local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
+				if not tRoot or not tHum or tHum.Health <= 0 then
+					StatusLabel.Text = "●  PvP: Waiting for " .. tostring(targetPlr.Name)
+					StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+					return
+				end
+
+				ensureEquippedIfNone()
+				StatusLabel.Text = "●  PvP Kill: " .. tostring(targetPlr.Name) .. " [" .. tostring(math.floor(tHum.Health)) .. " HP]"
+				StatusLabel.TextColor3 = EnemyColor
+
+				local stickPos = tRoot.CFrame * CFrame.new(0, 0, 3.2)
+				local goalCF = CFrame.lookAt(stickPos.Position, tRoot.Position)
+				local dist = (root.Position - goalCF.Position).Magnitude
+
+				if dist > 4 then
+					local dur = math.clamp(dist / math.max(PvPSpeed, 80), 0.02, 2.5)
+					if CurrentTween then
+						pcall(function() CurrentTween:Cancel() end)
+					end
+					CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = goalCF})
+					CurrentTween:Play()
+				else
+					if CurrentTween then
+						pcall(function() CurrentTween:Cancel() end)
+						CurrentTween = nil
+					end
+					root.CFrame = goalCF
+					Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
+				end
+
+				root.AssemblyLinearVelocity = Vector3.zero
+				root.AssemblyAngularVelocity = Vector3.zero
+				if dist <= 16 then
+					triggerHit(char)
+				end
+			end)
+		end
+	end
+end)
 
 local function findQuestNPC(myPos)
 	local bestPart, bestDist = nil, math.huge
@@ -1417,9 +1652,9 @@ RunService.Stepped:Connect(function()
 			end
 		end
 
-		local noclipActive = AutoChestEnabled or hasActiveTargetFarm() or (BoatNoclipEnabled and hum and hum.SeatPart)
+		local noclipActive = AutoChestEnabled or hasActiveTargetFarm() or PvPEnabled or (BoatNoclipEnabled and hum and hum.SeatPart)
 
-		if (hasActiveTargetFarm() or AutoChestEnabled) and root then
+		if (hasActiveTargetFarm() or AutoChestEnabled or PvPEnabled) and root then
 			root.AssemblyLinearVelocity = Vector3.zero
 			root.AssemblyAngularVelocity = Vector3.zero
 		end
