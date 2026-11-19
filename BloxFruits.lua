@@ -3,6 +3,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualUser = game:GetService("VirtualUser")
 
 local VirtualInputManager = nil
@@ -22,6 +23,7 @@ local TextMuted = Color3.fromRGB(156, 152, 178)
 local EnemyColor = Color3.fromRGB(244, 63, 94)
 local SeaBeastColor = Color3.fromRGB(56, 189, 248)
 local ChestColor = Color3.fromRGB(250, 204, 21)
+local FruitColor = Color3.fromRGB(168, 85, 247)
 
 local BoatSpeedEnabled = false
 local TargetBoatSpeed = 150
@@ -39,6 +41,10 @@ local BringMobsEnabled = true
 local AutoQuestEnabled = true
 local ESPEnabled = true
 local ChestESPEnabled = false
+local FruitESPEnabled = false
+local AutoGetFruitsEnabled = false
+local AutoStoreFruitEnabled = false
+local AutoRollFruitEnabled = false
 local PvPEnabled = false
 local AimBotEnabled = false
 local PvPSpeed = 320
@@ -49,6 +55,7 @@ local CurrentTween = nil
 local ScriptRunning = true
 local LastHitTick = 0
 local LastPvPClickTick = 0
+local LastRollTick = 0
 
 local AllowedChestNames = {
 	"GoldChest",
@@ -59,6 +66,7 @@ local AllowedChestNames = {
 local TrackedPlayers = {}
 local TrackedNPCs = {}
 local TrackedChests = {}
+local TrackedFruits = {}
 local SeaEventKeywords = {"seabeast", "sea beast", "terror", "shark", "leviathan", "piranha", "ship", "ghost", "mirage", "kitsune"}
 
 local function isSeaEvent(name)
@@ -83,6 +91,44 @@ local function isDemonicSoulEnemy(model)
 		return false
 	end
 	return string.find(string.lower(tostring(model.Name)), "demonic soul") ~= nil
+end
+
+local function isFruitObject(obj)
+	if not obj or not obj.Name then
+		return false
+	end
+	if Players:GetPlayerFromCharacter(obj) or obj:FindFirstAncestorWhichIsA("Player") then
+		return false
+	end
+	local lower = string.lower(tostring(obj.Name))
+	if not string.find(lower, "fruit") then
+		return false
+	end
+	if obj:IsA("Tool") then
+		return true
+	end
+	if obj:IsA("Model") or obj:IsA("BasePart") then
+		if obj:FindFirstChildWhichIsA("TouchTransmitter", true) or obj:FindFirstChildWhichIsA("ClickDetector", true) or obj:FindFirstChildWhichIsA("ProximityPrompt", true) or obj:IsA("BasePart") then
+			return true
+		end
+	end
+	return false
+end
+
+local function getFruitAnchorPart(obj)
+	if not obj or not obj.Parent then
+		return nil
+	end
+	if obj:IsA("BasePart") then
+		return obj
+	end
+	if obj:IsA("Model") then
+		return obj.PrimaryPart or obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart", true)
+	end
+	if obj:IsA("Tool") then
+		return obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart", true)
+	end
+	return nil
 end
 
 local function hasActiveTargetFarm()
@@ -123,7 +169,7 @@ local function applyDeviceLayout()
 		MainFrame.Size = UDim2.new(0, 310, 0, 355)
 		UIScale.Scale = math.clamp(vp.Y / 480, 0.72, 0.96)
 	else
-		MainFrame.Size = UDim2.new(0, 390, 0, 425)
+		MainFrame.Size = UDim2.new(0, 410, 0, 425)
 		UIScale.Scale = math.clamp(vp.Y / 900, 0.88, 1.15)
 	end
 end
@@ -269,6 +315,13 @@ ExitBtn.MouseButton1Click:Connect(function()
 			end
 		end)
 	end
+	for _, esp in pairs(TrackedFruits) do
+		pcall(function()
+			if esp.Text then
+				esp.Text:Remove()
+			end
+		end)
+	end
 	pcall(function() ScreenGui:Destroy() end)
 end)
 
@@ -309,25 +362,25 @@ local tabLayout = Instance.new("UIListLayout")
 tabLayout.FillDirection = Enum.FillDirection.Horizontal
 tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 tabLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-tabLayout.Padding = UDim.new(0, 3)
+tabLayout.Padding = UDim.new(0, 2)
 tabLayout.Parent = TabBar
 
 local tabPadding = Instance.new("UIPadding")
-tabPadding.PaddingLeft = UDim.new(0, 3)
-tabPadding.PaddingRight = UDim.new(0, 3)
+tabPadding.PaddingLeft = UDim.new(0, 2)
+tabPadding.PaddingRight = UDim.new(0, 2)
 tabPadding.PaddingTop = UDim.new(0, 3)
 tabPadding.PaddingBottom = UDim.new(0, 3)
 tabPadding.Parent = TabBar
 
 local function createTabButton(name, total)
 	local tabBtn = Instance.new("TextButton")
-	tabBtn.Size = UDim2.new(1 / total, -3, 1, 0)
+	tabBtn.Size = UDim2.new(1 / total, -2.5, 1, 0)
 	tabBtn.BackgroundColor3 = Color3.fromRGB(24, 21, 38)
 	tabBtn.BackgroundTransparency = 1
 	tabBtn.Text = name
 	tabBtn.TextColor3 = TextMuted
 	tabBtn.Font = Enum.Font.GothamBold
-	tabBtn.TextSize = 9.5
+	tabBtn.TextSize = 8.8
 	tabBtn.TextScaled = false
 	tabBtn.Parent = TabBar
 	Instance.new("UICorner", tabBtn).CornerRadius = UDim.new(0, 6)
@@ -385,21 +438,32 @@ Container5.CanvasSize = UDim2.new(0, 0, 0, 275)
 Container5.Visible = false
 Container5.Parent = MainFrame
 
-local tab1Btn = createTabButton("Sea", 5)
-local tab2Btn = createTabButton("Farm", 5)
-local tab3Btn = createTabButton("Player", 5)
-local tab4Btn = createTabButton("Visuals", 5)
-local tab5Btn = createTabButton("PvP", 5)
+local Container6 = Instance.new("ScrollingFrame")
+Container6.Size = Container1.Size
+Container6.Position = Container1.Position
+Container6.BackgroundTransparency = 1
+Container6.ScrollBarThickness = 3
+Container6.ScrollBarImageColor3 = ThemeColor
+Container6.CanvasSize = UDim2.new(0, 0, 0, 160)
+Container6.Visible = false
+Container6.Parent = MainFrame
+
+local tab1Btn = createTabButton("Sea", 6)
+local tab2Btn = createTabButton("Farm", 6)
+local tab3Btn = createTabButton("Player", 6)
+local tab4Btn = createTabButton("Visuals", 6)
+local tab5Btn = createTabButton("PvP", 6)
+local tab6Btn = createTabButton("Fruits", 6)
 
 tab1Btn.BackgroundTransparency = 0
 tab1Btn.BackgroundColor3 = ThemeColor
 tab1Btn.TextColor3 = Color3.new(1, 1, 1)
 
 local function switchTab(activeBtn, activeContainer)
-	for _, c in ipairs({Container1, Container2, Container3, Container4, Container5}) do
+	for _, c in ipairs({Container1, Container2, Container3, Container4, Container5, Container6}) do
 		c.Visible = false
 	end
-	for _, b in ipairs({tab1Btn, tab2Btn, tab3Btn, tab4Btn, tab5Btn}) do
+	for _, b in ipairs({tab1Btn, tab2Btn, tab3Btn, tab4Btn, tab5Btn, tab6Btn}) do
 		b.BackgroundTransparency = 1
 		b.TextColor3 = TextMuted
 	end
@@ -414,6 +478,7 @@ tab2Btn.MouseButton1Click:Connect(function() switchTab(tab2Btn, Container2) end)
 tab3Btn.MouseButton1Click:Connect(function() switchTab(tab3Btn, Container3) end)
 tab4Btn.MouseButton1Click:Connect(function() switchTab(tab4Btn, Container4) end)
 tab5Btn.MouseButton1Click:Connect(function() switchTab(tab5Btn, Container5) end)
+tab6Btn.MouseButton1Click:Connect(function() switchTab(tab6Btn, Container6) end)
 
 local function makeDraggable(handle, target)
 	local dragging, dragStart, startPos = false, nil, nil
@@ -861,6 +926,32 @@ local listStroke = Instance.new("UIStroke", PlayerListFrame)
 listStroke.Color = Color3.fromRGB(42, 36, 64)
 listStroke.Thickness = 1
 
+createToggle(Container6, "Auto Get Fruits", 0, false, function(state)
+	AutoGetFruitsEnabled = state
+	if not state then
+		pcall(function()
+			if CurrentTween then
+				CurrentTween:Cancel()
+				CurrentTween = nil
+			end
+		end)
+		StatusLabel.Text = "●  Status: Ready"
+		StatusLabel.TextColor3 = TextMuted
+	end
+end)
+
+createToggle(Container6, "ESP Fruits", 38, false, function(state)
+	FruitESPEnabled = state
+end)
+
+createToggle(Container6, "Auto Store Fruit", 76, false, function(state)
+	AutoStoreFruitEnabled = state
+end)
+
+createToggle(Container6, "Auto Roll Fruit", 114, false, function(state)
+	AutoRollFruitEnabled = state
+end)
+
 local function selectPvPPlayer(plr)
 	SelectedPvPPlayer = plr
 	if plr and plr.Parent then
@@ -1076,6 +1167,148 @@ local function ensureEquippedIfNone()
 	end)
 end
 
+local function storeFruitsInInventory()
+	pcall(function()
+		local containers = {LocalPlayer:FindFirstChild("Backpack"), LocalPlayer.Character}
+		for _, cont in ipairs(containers) do
+			if cont then
+				for _, item in ipairs(cont:GetChildren()) do
+					if item:IsA("Tool") and string.find(string.lower(item.Name), "fruit") then
+						local fruitName = item.Name
+						local remotes = {}
+						for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+							if obj:IsA("RemoteFunction") or obj:IsA("RemoteEvent") then
+								local n = string.lower(obj.Name)
+								if string.find(n, "store") or string.find(n, "fruit") or string.find(n, "inventory") or string.find(n, "commf") then
+									table.insert(remotes, obj)
+								end
+							end
+						end
+						for _, rem in ipairs(remotes) do
+							if rem:IsA("RemoteFunction") then
+								pcall(function() rem:InvokeServer("StoreFruit", fruitName, item) end)
+								pcall(function() rem:InvokeServer(fruitName, item) end)
+								pcall(function() rem:InvokeServer("Store", fruitName) end)
+							elseif rem:IsA("RemoteEvent") then
+								pcall(function() rem:FireServer("StoreFruit", fruitName, item) end)
+								pcall(function() rem:FireServer(fruitName, item) end)
+								pcall(function() rem:FireServer("Store", fruitName) end)
+							end
+						end
+					end
+				end
+			end
+		end
+	end)
+end
+
+local function tryAutoRollFruit()
+	local now = tick()
+	if (now - LastRollTick) < 2.0 then
+		return
+	end
+	LastRollTick = now
+	pcall(function()
+		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
+			if rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent") then
+				local n = string.lower(rem.Name)
+				if string.find(n, "roll") or string.find(n, "gacha") or string.find(n, "spin") or string.find(n, "fruit") then
+					if rem:IsA("RemoteFunction") then
+						pcall(function() rem:InvokeServer("Censor") end)
+						pcall(function() rem:InvokeServer("RollFruit") end)
+						pcall(function() rem:InvokeServer("Roll") end)
+					elseif rem:IsA("RemoteEvent") then
+						pcall(function() rem:FireServer("Censor") end)
+						pcall(function() rem:FireServer("RollFruit") end)
+						pcall(function() rem:FireServer("Roll") end)
+					end
+				end
+			end
+		end
+	end)
+end
+
+local function getNearestDroppedFruit(myPos)
+	local bestObj, bestPart, bestDist = nil, nil, math.huge
+	pcall(function()
+		for _, obj in ipairs(Workspace:GetDescendants()) do
+			if isFruitObject(obj) then
+				local part = getFruitAnchorPart(obj)
+				if part and part.Parent then
+					local d = (myPos - part.Position).Magnitude
+					if d < bestDist then
+						bestDist = d
+						bestObj = obj
+						bestPart = part
+					end
+				end
+			end
+		end
+	end)
+	return bestObj, bestPart, bestDist
+end
+
+task.spawn(function()
+	while ScriptRunning do
+		task.wait(0.12)
+		if AutoGetFruitsEnabled then
+			pcall(function()
+				local char = LocalPlayer.Character
+				local root = char and char:FindFirstChild("HumanoidRootPart")
+				local hum = char and char:FindFirstChildOfClass("Humanoid")
+				if not root or not hum or hum.Health <= 0 then
+					return
+				end
+
+				local fruitObj, fruitPart, dist = getNearestDroppedFruit(root.Position)
+				if fruitObj and fruitPart and fruitPart.Parent then
+					StatusLabel.Text = "●  Fruit: " .. tostring(fruitObj.Name) .. " [" .. tostring(math.floor(dist)) .. "m]"
+					StatusLabel.TextColor3 = FruitColor
+
+					local goalCF = fruitPart.CFrame + Vector3.new(0, 1.5, 0)
+					local dur = math.clamp(dist / math.max(FlySpeed, 120), 0.04, 12)
+					if CurrentTween then
+						pcall(function() CurrentTween:Cancel() end)
+					end
+					CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = goalCF})
+					CurrentTween:Play()
+
+					local t0 = tick()
+					while ScriptRunning and AutoGetFruitsEnabled and fruitPart.Parent and (tick() - t0) < (dur + 0.35) do
+						root.AssemblyLinearVelocity = Vector3.zero
+						task.wait(0.05)
+					end
+					if CurrentTween then
+						pcall(function() CurrentTween:Cancel() end)
+						CurrentTween = nil
+					end
+					if fruitPart.Parent then
+						root.CFrame = goalCF
+						for _, desc in ipairs(fruitObj:GetDescendants()) do
+							if desc:IsA("ProximityPrompt") then
+								pcall(function() fireproximityprompt(desc) end)
+							elseif desc:IsA("ClickDetector") and fireclickdetector then
+								pcall(function() fireclickdetector(desc) end)
+							end
+						end
+					end
+				else
+					StatusLabel.Text = "●  Auto Get Fruits: Scanning Map..."
+					StatusLabel.TextColor3 = AccentGlow
+				end
+			end)
+		end
+
+		if AutoStoreFruitEnabled then
+			storeFruitsInInventory()
+		end
+
+		if AutoRollFruitEnabled then
+			tryAutoRollFruit()
+		end
+	end
+end)
+
 local function isPointerOverUI()
 	local ok, over = pcall(function()
 		if not MainFrame.Visible then
@@ -1132,7 +1365,7 @@ local function applyAimBot(char, root)
 			Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, aimPart.Position)
 			local flatLook = CFrame.lookAt(root.Position, Vector3.new(aimPart.Position.X, root.Position.Y, aimPart.Position.Z))
 			root.CFrame = CFrame.new(root.Position) * flatLook.Rotation
-			if not PvPEnabled then
+			if not PvPEnabled and not AutoGetFruitsEnabled then
 				StatusLabel.Text = "●  Aim Bot: " .. tostring(aimName)
 				StatusLabel.TextColor3 = AccentGlow
 			end
@@ -1762,9 +1995,9 @@ RunService.Stepped:Connect(function()
 			end
 		end
 
-		local noclipActive = AutoChestEnabled or hasActiveTargetFarm() or PvPEnabled or (BoatNoclipEnabled and hum and hum.SeatPart)
+		local noclipActive = AutoChestEnabled or hasActiveTargetFarm() or PvPEnabled or AutoGetFruitsEnabled or (BoatNoclipEnabled and hum and hum.SeatPart)
 
-		if (hasActiveTargetFarm() or AutoChestEnabled or PvPEnabled) and root then
+		if (hasActiveTargetFarm() or AutoChestEnabled or PvPEnabled or AutoGetFruitsEnabled) and root then
 			root.AssemblyLinearVelocity = Vector3.zero
 			root.AssemblyAngularVelocity = Vector3.zero
 		end
@@ -1891,6 +2124,38 @@ if Drawing then
 		end)
 	end
 
+	local function addFruit(obj)
+		pcall(function()
+			if TrackedFruits[obj] or not isFruitObject(obj) then
+				return
+			end
+			local part = getFruitAnchorPart(obj)
+			if not part then
+				return
+			end
+			TrackedFruits[obj] = {
+				Object = obj,
+				Part = part,
+				Label = tostring(obj.Name),
+				Text = createDrawing("Text", {Size = 12, Center = true, Outline = true, Color = FruitColor, Visible = false})
+			}
+		end)
+	end
+
+	local function removeFruit(obj)
+		pcall(function()
+			local data = TrackedFruits[obj]
+			if data then
+				pcall(function()
+					if data.Text then
+						data.Text:Remove()
+					end
+				end)
+				TrackedFruits[obj] = nil
+			end
+		end)
+	end
+
 	for _, p in ipairs(Players:GetPlayers()) do
 		addPlayer(p)
 	end
@@ -1900,6 +2165,9 @@ if Drawing then
 	local function scanFolder(folder)
 		pcall(function()
 			for _, obj in ipairs(folder:GetChildren()) do
+				if isFruitObject(obj) then
+					addFruit(obj)
+				end
 				if obj:IsA("Model") then
 					addNPC(obj)
 					if isValidChestPart(obj.PrimaryPart) then
@@ -1908,6 +2176,9 @@ if Drawing then
 					for _, desc in ipairs(obj:GetDescendants()) do
 						if isValidChestPart(desc) then
 							addChest(desc)
+						end
+						if isFruitObject(desc) then
+							addFruit(desc)
 						end
 					end
 				elseif obj:IsA("BasePart") then
@@ -1926,11 +2197,19 @@ if Drawing then
 			if obj:IsA("Model") then
 				task.wait(0.2)
 				addNPC(obj)
+				if isFruitObject(obj) then
+					addFruit(obj)
+				end
 			elseif obj:IsA("BasePart") then
 				task.wait(0.1)
 				if isValidChestPart(obj) then
 					addChest(obj)
+				elseif isFruitObject(obj) then
+					addFruit(obj)
 				end
+			elseif obj:IsA("Tool") and isFruitObject(obj) then
+				task.wait(0.1)
+				addFruit(obj)
 			end
 		end)
 	end)
@@ -2040,6 +2319,26 @@ if Drawing then
 					if onScreen then
 						local dist = myRoot and math.floor((myRoot.Position - part.Position).Magnitude) or 0
 						esp.Text.Text = "[CHEST] " .. tostring(esp.Label) .. " [" .. dist .. "m]"
+						esp.Text.Position = Vector2.new(pos.X, pos.Y)
+						esp.Text.Visible = true
+					else
+						esp.Text.Visible = false
+					end
+				end
+			end
+
+			for obj, esp in pairs(TrackedFruits) do
+				if not obj.Parent or not esp.Part or not esp.Part.Parent then
+					removeFruit(obj)
+				elseif not FruitESPEnabled or not esp.Text then
+					if esp.Text then
+						esp.Text.Visible = false
+					end
+				else
+					local pos, onScreen = Camera:WorldToViewportPoint(esp.Part.Position)
+					if onScreen then
+						local dist = myRoot and math.floor((myRoot.Position - esp.Part.Position).Magnitude) or 0
+						esp.Text.Text = "[FRUIT] " .. tostring(esp.Label) .. " [" .. dist .. "m]"
 						esp.Text.Position = Vector2.new(pos.X, pos.Y)
 						esp.Text.Visible = true
 					else
