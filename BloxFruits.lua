@@ -40,6 +40,7 @@ local AutoQuestEnabled = true
 local ESPEnabled = true
 local ChestESPEnabled = false
 local PvPEnabled = false
+local AimBotEnabled = false
 local PvPSpeed = 320
 local SelectedPvPPlayer = nil
 local FlySpeed = 280
@@ -47,6 +48,7 @@ local BringRadius = 220
 local CurrentTween = nil
 local ScriptRunning = true
 local LastHitTick = 0
+local LastPvPClickTick = 0
 
 local AllowedChestNames = {
 	"GoldChest",
@@ -379,7 +381,7 @@ Container5.Position = Container1.Position
 Container5.BackgroundTransparency = 1
 Container5.ScrollBarThickness = 3
 Container5.ScrollBarImageColor3 = ThemeColor
-Container5.CanvasSize = UDim2.new(0, 0, 0, 235)
+Container5.CanvasSize = UDim2.new(0, 0, 0, 275)
 Container5.Visible = false
 Container5.Parent = MainFrame
 
@@ -792,6 +794,16 @@ createToggle(Container5, "Auto Kill Target", 0, false, function(state)
 				CurrentTween = nil
 			end
 		end)
+		if not AimBotEnabled then
+			StatusLabel.Text = "●  Status: Ready"
+			StatusLabel.TextColor3 = TextMuted
+		end
+	end
+end)
+
+createToggle(Container5, "Aim Bot", 38, false, function(state)
+	AimBotEnabled = state
+	if not state and not PvPEnabled then
 		StatusLabel.Text = "●  Status: Ready"
 		StatusLabel.TextColor3 = TextMuted
 	end
@@ -799,7 +811,7 @@ end)
 
 local TargetCard = Instance.new("Frame")
 TargetCard.Size = UDim2.new(1, -6, 0, 34)
-TargetCard.Position = UDim2.new(0, 2, 0, 38)
+TargetCard.Position = UDim2.new(0, 2, 0, 76)
 TargetCard.BackgroundColor3 = CardDark
 TargetCard.BorderSizePixel = 0
 TargetCard.Parent = Container5
@@ -831,13 +843,13 @@ NextTargetBtn.TextSize = 9.5
 NextTargetBtn.Parent = TargetCard
 Instance.new("UICorner", NextTargetBtn).CornerRadius = UDim.new(0, 6)
 
-createSlider(Container5, 78, "PvP Follow Speed", 80, 900, PvPSpeed, function(val)
+createSlider(Container5, 116, "PvP Follow Speed", 80, 900, PvPSpeed, function(val)
 	PvPSpeed = val
 end)
 
 local PlayerListFrame = Instance.new("ScrollingFrame")
 PlayerListFrame.Size = UDim2.new(1, -6, 0, 102)
-PlayerListFrame.Position = UDim2.new(0, 2, 0, 126)
+PlayerListFrame.Position = UDim2.new(0, 2, 0, 164)
 PlayerListFrame.BackgroundColor3 = CardDark
 PlayerListFrame.BorderSizePixel = 0
 PlayerListFrame.ScrollBarThickness = 2
@@ -1077,6 +1089,82 @@ local function isPointerOverUI()
 	return ok and over or false
 end
 
+local function getAimTargetPart(myRoot)
+	local targetPlr = SelectedPvPPlayer
+	if targetPlr and targetPlr.Parent and targetPlr ~= LocalPlayer then
+		local tChar = targetPlr.Character
+		local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
+		local tPart = tChar and (tChar:FindFirstChild("Head") or tChar:FindFirstChild("HumanoidRootPart"))
+		if tHum and tHum.Health > 0 and tPart then
+			return tPart, targetPlr.Name
+		end
+	end
+
+	if not myRoot then
+		return nil, nil
+	end
+
+	local bestPart, bestName, bestDist = nil, nil, math.huge
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer and p.Character then
+			local pHum = p.Character:FindFirstChildOfClass("Humanoid")
+			local pPart = p.Character:FindFirstChild("Head") or p.Character:FindFirstChild("HumanoidRootPart")
+			if pHum and pHum.Health > 0 and pPart then
+				local d = (myRoot.Position - pPart.Position).Magnitude
+				if d < bestDist then
+					bestDist = d
+					bestPart = pPart
+					bestName = p.Name
+				end
+			end
+		end
+	end
+	return bestPart, bestName
+end
+
+local function applyAimBot(char, root)
+	if not AimBotEnabled or not char or not root then
+		return
+	end
+	pcall(function()
+		local aimPart, aimName = getAimTargetPart(root)
+		if aimPart then
+			Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, aimPart.Position)
+			local flatLook = CFrame.lookAt(root.Position, Vector3.new(aimPart.Position.X, root.Position.Y, aimPart.Position.Z))
+			root.CFrame = CFrame.new(root.Position) * flatLook.Rotation
+			if not PvPEnabled then
+				StatusLabel.Text = "●  Aim Bot: " .. tostring(aimName)
+				StatusLabel.TextColor3 = AccentGlow
+			end
+		end
+	end)
+end
+
+local function triggerAutoClickerHit(char)
+	local now = tick()
+	if (now - LastPvPClickTick) < 0.025 then
+		return
+	end
+	LastPvPClickTick = now
+	pcall(function()
+		local tool = char and char:FindFirstChildOfClass("Tool")
+		if tool then
+			tool:Activate()
+		end
+		local x = Camera.ViewportSize.X * 0.5
+		local y = Camera.ViewportSize.Y * 0.5
+		if VirtualInputManager then
+			VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+			VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+		end
+		VirtualUser:CaptureController()
+		VirtualUser:ClickButton1(Vector2.new(x, y))
+		if mouse1click then
+			mouse1click()
+		end
+	end)
+end
+
 local function triggerHit(char)
 	if isPointerOverUI() then
 		return
@@ -1105,8 +1193,8 @@ end
 
 task.spawn(function()
 	while ScriptRunning do
-		task.wait(0.04)
-		if PvPEnabled then
+		task.wait(0.025)
+		if PvPEnabled or AimBotEnabled then
 			pcall(function()
 				local char = LocalPlayer.Character
 				local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -1115,50 +1203,56 @@ task.spawn(function()
 					return
 				end
 
-				local targetPlr = SelectedPvPPlayer
-				if not targetPlr or not targetPlr.Parent or targetPlr == LocalPlayer then
-					StatusLabel.Text = "●  PvP: Select a Player"
-					StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-					return
+				if AimBotEnabled then
+					applyAimBot(char, root)
 				end
 
-				local tChar = targetPlr.Character
-				local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-				local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
-				if not tRoot or not tHum or tHum.Health <= 0 then
-					StatusLabel.Text = "●  PvP: Waiting for " .. tostring(targetPlr.Name)
-					StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-					return
-				end
-
-				ensureEquippedIfNone()
-				StatusLabel.Text = "●  PvP Kill: " .. tostring(targetPlr.Name) .. " [" .. tostring(math.floor(tHum.Health)) .. " HP]"
-				StatusLabel.TextColor3 = EnemyColor
-
-				local stickPos = tRoot.CFrame * CFrame.new(0, 0, 3.2)
-				local goalCF = CFrame.lookAt(stickPos.Position, tRoot.Position)
-				local dist = (root.Position - goalCF.Position).Magnitude
-
-				if dist > 4 then
-					local dur = math.clamp(dist / math.max(PvPSpeed, 80), 0.02, 2.5)
-					if CurrentTween then
-						pcall(function() CurrentTween:Cancel() end)
+				if PvPEnabled then
+					local targetPlr = SelectedPvPPlayer
+					if not targetPlr or not targetPlr.Parent or targetPlr == LocalPlayer then
+						StatusLabel.Text = "●  PvP: Select a Player"
+						StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+						return
 					end
-					CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = goalCF})
-					CurrentTween:Play()
-				else
-					if CurrentTween then
-						pcall(function() CurrentTween:Cancel() end)
-						CurrentTween = nil
-					end
-					root.CFrame = goalCF
-					Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
-				end
 
-				root.AssemblyLinearVelocity = Vector3.zero
-				root.AssemblyAngularVelocity = Vector3.zero
-				if dist <= 16 then
-					triggerHit(char)
+					local tChar = targetPlr.Character
+					local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+					local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
+					if not tRoot or not tHum or tHum.Health <= 0 then
+						StatusLabel.Text = "●  PvP: Waiting for " .. tostring(targetPlr.Name)
+						StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+						return
+					end
+
+					ensureEquippedIfNone()
+					StatusLabel.Text = "●  PvP Auto-Click: " .. tostring(targetPlr.Name) .. " [" .. tostring(math.floor(tHum.Health)) .. " HP]"
+					StatusLabel.TextColor3 = EnemyColor
+
+					local stickPos = tRoot.CFrame * CFrame.new(0, 0, 3.2)
+					local goalCF = CFrame.lookAt(stickPos.Position, tRoot.Position)
+					local dist = (root.Position - goalCF.Position).Magnitude
+
+					if dist > 4 then
+						local dur = math.clamp(dist / math.max(PvPSpeed, 80), 0.02, 2.5)
+						if CurrentTween then
+							pcall(function() CurrentTween:Cancel() end)
+						end
+						CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = goalCF})
+						CurrentTween:Play()
+					else
+						if CurrentTween then
+							pcall(function() CurrentTween:Cancel() end)
+							CurrentTween = nil
+						end
+						root.CFrame = goalCF
+						Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
+					end
+
+					root.AssemblyLinearVelocity = Vector3.zero
+					root.AssemblyAngularVelocity = Vector3.zero
+					if dist <= 22 then
+						triggerAutoClickerHit(char)
+					end
 				end
 			end)
 		end
