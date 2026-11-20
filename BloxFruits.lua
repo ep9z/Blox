@@ -56,8 +56,8 @@ local AimBotEnabled = false
 local PvPSpeed = 350
 local SelectedPvPPlayer = nil
 local FlySpeed = 320
-local FarmHeightOffset = 22
-local BringRadius = 280
+local FarmHeightOffset = 18
+local BringRadius = 260
 local SelectedWorldFilter = "Auto"
 local ScriptRunning = true
 
@@ -66,8 +66,15 @@ local LastRollTick = 0
 local LastStoreTick = 0
 local LastQuestTick = 0
 local LastFruitPickupTick = 0
+local LastScanTick = 0
 local SavedFogState = nil
 local ExpandedHitboxes = {}
+local CachedCombatRemotes = {}
+local CachedQuestRemotes = {}
+local CachedFruitRemotes = {}
+local CachedRollRemotes = {}
+local CachedChests = {}
+local CachedFruits = {}
 
 local HydraIslandFallbackPos = Vector3.new(5750, 610, -280)
 local HauntedCastleFallbackPos = Vector3.new(-9500, 145, 6080)
@@ -390,6 +397,32 @@ local TrackedChests = {}
 local TrackedFruits = {}
 local SeaEventKeywords = {"seabeast", "sea beast", "terror", "shark", "leviathan", "piranha", "ship", "ghost", "mirage", "kitsune"}
 
+local function rebuildRemoteCaches()
+	table.clear(CachedCombatRemotes)
+	table.clear(CachedQuestRemotes)
+	table.clear(CachedFruitRemotes)
+	table.clear(CachedRollRemotes)
+	pcall(function()
+		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
+			if rem:IsA("RemoteEvent") or rem:IsA("RemoteFunction") then
+				local n = string.lower(rem.Name)
+				if rem:IsA("RemoteEvent") and (string.find(n, "registerattack", 1, true) or string.find(n, "registerhit", 1, true) or string.find(n, "attack", 1, true)) then
+					table.insert(CachedCombatRemotes, rem)
+				end
+				if string.find(n, "commf", 1, true) or string.find(n, "quest", 1, true) then
+					table.insert(CachedQuestRemotes, rem)
+				end
+				if string.find(n, "commf", 1, true) or string.find(n, "store", 1, true) or string.find(n, "fruit", 1, true) then
+					table.insert(CachedFruitRemotes, rem)
+				end
+				if string.find(n, "roll", 1, true) or string.find(n, "gacha", 1, true) or string.find(n, "fruit", 1, true) then
+					table.insert(CachedRollRemotes, rem)
+				end
+			end
+		end
+	end)
+end
+
 local function detectCurrentWorld(myPos)
 	if SelectedWorldFilter == "World 1" or SelectedWorldFilter == "World 2" or SelectedWorldFilter == "World 3" then
 		return SelectedWorldFilter
@@ -573,14 +606,6 @@ local function getActualMobLevel(enemyModel)
 			or string.match(tostring(enemyModel.Name), "[Ll][Vv]?%.?%s*(%d+)")
 		if m then
 			return tonumber(m)
-		end
-		for _, desc in ipairs(enemyModel:GetDescendants()) do
-			if desc:IsA("TextLabel") then
-				local tm = string.match(tostring(desc.Text), "[Ll][Vv]?%.?%s*(%d+)")
-				if tm then
-					return tonumber(tm)
-				end
-			end
 		end
 		return nil
 	end)
@@ -791,7 +816,7 @@ local function stepTowardPosition(root, goalCFrame, speed, dt)
 	local delta = targetPos - currentPos
 	local dist = delta.Magnitude
 	local maxStep = math.max(speed, 60) * math.max(dt, 0.016)
-	if dist <= math.max(maxStep, 3.5) then
+	if dist <= math.max(maxStep, 4) then
 		root.CFrame = goalCFrame
 	else
 		local nextPos = currentPos + (delta.Unit * maxStep)
@@ -823,12 +848,53 @@ local function applyHitboxToEnemy(enemyModel)
 			if not ExpandedHitboxes[hrp] then
 				ExpandedHitboxes[hrp] = hrp.Size
 			end
-			hrp.Size = Vector3.new(28, 28, 28)
+			hrp.Size = Vector3.new(26, 26, 26)
 			hrp.Transparency = 1
 			hrp.CanCollide = false
-			hrp.Massless = true
 		end
 	end)
+end
+
+local function refreshWorldCaches(myPos)
+	local now = tick()
+	if (now - LastScanTick) < 1.1 then
+		return
+	end
+	LastScanTick = now
+	if #CachedCombatRemotes == 0 and #CachedQuestRemotes == 0 then
+		rebuildRemoteCaches()
+	end
+	local chests = {}
+	local fruits = {}
+	pcall(function()
+		for _, obj in ipairs(Workspace:GetDescendants()) do
+			if obj:IsA("BasePart") and obj.Parent and obj.Transparency < 0.95 then
+				local lowerName = string.lower(obj.Name)
+				local parentLower = obj.Parent ~= Workspace and string.lower(obj.Parent.Name) or ""
+				if not string.find(lowerName, "hitbox", 1, true) and not string.find(lowerName, "trigger", 1, true) then
+					for _, allowed in ipairs(AllowedChestNames) do
+						local aLower = string.lower(allowed)
+						if lowerName == aLower or parentLower == aLower then
+							table.insert(chests, obj)
+							break
+						end
+					end
+				end
+			end
+			if isPickupableFruitInstance(obj) then
+				local part = getFruitAnchorPart(obj)
+				if part and part.Parent then
+					table.insert(fruits, {
+						obj = obj,
+						part = part,
+						name = resolveBloxFruitName(obj.Name) or obj.Name
+					})
+				end
+			end
+		end
+	end)
+	CachedChests = chests
+	CachedFruits = fruits
 end
 
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -950,7 +1016,7 @@ subStroke.Transparency = 0.45
 local SubTitle = Instance.new("TextLabel")
 SubTitle.Size = UDim2.new(1, 0, 1, 0)
 SubTitle.BackgroundTransparency = 1
-SubTitle.Text = "AI WORLDS • V7"
+SubTitle.Text = "AI WORLDS • V7.1"
 SubTitle.TextColor3 = AccentCyan
 SubTitle.Font = Enum.Font.GothamBold
 SubTitle.TextSize = 8.5
@@ -982,7 +1048,7 @@ local OpenPill = Instance.new("TextButton")
 OpenPill.Size = UDim2.new(0, 134, 0, 34)
 OpenPill.Position = UDim2.new(0.02, 0, 0.1, 0)
 OpenPill.BackgroundColor3 = BgPanel
-OpenPill.Text = "⚡ NEXOARO AI V7"
+OpenPill.Text = "⚡ NEXOARO AI V7.1"
 OpenPill.TextColor3 = AccentCyan
 OpenPill.Font = Enum.Font.GothamBold
 OpenPill.TextSize = 11
@@ -1114,7 +1180,7 @@ Container2.Position = Container1.Position
 Container2.BackgroundTransparency = 1
 Container2.ScrollBarThickness = 3
 Container2.ScrollBarImageColor3 = AccentCyan
-Container2.CanvasSize = UDim2.new(0, 0, 0, 630)
+Container2.CanvasSize = UDim2.new(0, 0, 0, 560)
 Container2.Visible = false
 Container2.Parent = MainFrame
 
@@ -1521,7 +1587,7 @@ createToggle(Container2, "Auto Farm Bones", 304, false, function(state) FarmBone
 createToggle(Container2, "Bring Mobs Under You", 342, true, function(state) BringMobsEnabled = state end)
 createToggle(Container2, "Auto Quest (Level Bracket)", 380, true, function(state) AutoQuestEnabled = state end)
 createSlider(Container2, 418, "Farm Fly Speed", 60, 800, FlySpeed, function(val) FlySpeed = val end)
-createSlider(Container2, 466, "Height Above Mob", 6, 120, FarmHeightOffset, function(val) FarmHeightOffset = val end)
+createSlider(Container2, 466, "Height Above Mob", 6, 80, FarmHeightOffset, function(val) FarmHeightOffset = val end)
 
 createToggle(Container3, "Walk Speed Boost", 0, false, function(state)
 	WalkSpeedEnabled = state
@@ -1714,8 +1780,8 @@ end)
 LocalPlayer.Idled:Connect(function()
 	if ScriptRunning and AntiAFKEnabled then
 		pcall(function()
-			for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
-				if rem:IsA("RemoteEvent") then
+			for _, rem in ipairs(CachedQuestRemotes) do
+				if rem and rem:IsA("RemoteEvent") then
 					local n = string.lower(rem.Name)
 					if string.find(n, "afk", 1, true) or string.find(n, "idle", 1, true) then
 						pcall(function() rem:FireServer() end)
@@ -1757,14 +1823,6 @@ local function hasActiveQuest()
 		if questFrame and questFrame.Visible then
 			return true
 		end
-		for _, gui in ipairs(playerGui:GetDescendants()) do
-			if gui:IsA("Frame") and string.find(string.lower(gui.Name), "quest", 1, true) and gui.Visible then
-				local titleLbl = gui:FindFirstChildWhichIsA("TextLabel", true)
-				if titleLbl and titleLbl.Text ~= "" and not string.find(string.lower(titleLbl.Text), "select", 1, true) then
-					return true
-				end
-			end
-		end
 		return false
 	end)
 	return ok and active or false
@@ -1778,8 +1836,7 @@ local function ensureEquippedIfNone()
 		if not char or not hum or not backpack then
 			return
 		end
-		local equipped = char:FindFirstChildOfClass("Tool")
-		if equipped then
+		if char:FindFirstChildOfClass("Tool") then
 			return
 		end
 		local firstTool = backpack:FindFirstChildOfClass("Tool")
@@ -1794,34 +1851,19 @@ local function tryTakeQuestForMob(mobInfo)
 		return
 	end
 	local now = tick()
-	if (now - LastQuestTick) < 3.5 then
+	if (now - LastQuestTick) < 4.0 then
 		return
 	end
 	LastQuestTick = now
 	pcall(function()
 		local questNpc = mobInfo.questNpc
 		local questNum = mobInfo.questNum or 1
-		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
-			if rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent") then
-				local n = string.lower(rem.Name)
-				if string.find(n, "commf", 1, true) or string.find(n, "quest", 1, true) then
-					if rem:IsA("RemoteFunction") then
-						pcall(function() rem:InvokeServer("StartQuest", questNpc, questNum) end)
-					elseif rem:IsA("RemoteEvent") then
-						pcall(function() rem:FireServer("StartQuest", questNpc, questNum) end)
-					end
-				end
-			end
-		end
-		for _, gui in ipairs(playerGui:GetDescendants()) do
-			if gui:IsA("TextButton") and gui.Visible then
-				local t = string.lower(gui.Text)
-				if string.find(t, "accept", 1, true) or string.find(t, "confirm", 1, true) then
-					if getconnections then
-						for _, conn in ipairs(getconnections(gui.MouseButton1Click)) do
-							pcall(function() conn:Fire() end)
-						end
-					end
+		for _, rem in ipairs(CachedQuestRemotes) do
+			if rem and rem.Parent then
+				if rem:IsA("RemoteFunction") then
+					pcall(function() rem:InvokeServer("StartQuest", questNpc, questNum) end)
+				elseif rem:IsA("RemoteEvent") then
+					pcall(function() rem:FireServer("StartQuest", questNpc, questNum) end)
 				end
 			end
 		end
@@ -1830,7 +1872,7 @@ end
 
 local function storeFruitsInInventory()
 	local now = tick()
-	if (now - LastStoreTick) < 1.2 then
+	if (now - LastStoreTick) < 1.5 then
 		return
 	end
 	LastStoreTick = now
@@ -1842,17 +1884,12 @@ local function storeFruitsInInventory()
 					local resolvedFruit = item:IsA("Tool") and resolveBloxFruitName(item.Name) or nil
 					if resolvedFruit then
 						local fruitKey = getStoreFruitKey(item, resolvedFruit)
-						for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
-							if rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent") then
-								local n = string.lower(rem.Name)
-								if string.find(n, "commf", 1, true) or string.find(n, "store", 1, true) or string.find(n, "fruit", 1, true) or string.find(n, "inventory", 1, true) then
-									if rem:IsA("RemoteFunction") then
-										pcall(function() rem:InvokeServer("StoreFruit", fruitKey, item) end)
-										pcall(function() rem:InvokeServer("StoreFruit", resolvedFruit, item) end)
-									elseif rem:IsA("RemoteEvent") then
-										pcall(function() rem:FireServer("StoreFruit", fruitKey, item) end)
-										pcall(function() rem:FireServer("StoreFruit", resolvedFruit, item) end)
-									end
+						for _, rem in ipairs(CachedFruitRemotes) do
+							if rem and rem.Parent then
+								if rem:IsA("RemoteFunction") then
+									pcall(function() rem:InvokeServer("StoreFruit", fruitKey, item) end)
+								elseif rem:IsA("RemoteEvent") then
+									pcall(function() rem:FireServer("StoreFruit", fruitKey, item) end)
 								end
 							end
 						end
@@ -1865,22 +1902,17 @@ end
 
 local function tryAutoRollFruit()
 	local now = tick()
-	if (now - LastRollTick) < 2.0 then
+	if (now - LastRollTick) < 2.5 then
 		return
 	end
 	LastRollTick = now
 	pcall(function()
-		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
-			if rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent") then
-				local n = string.lower(rem.Name)
-				if string.find(n, "roll", 1, true) or string.find(n, "gacha", 1, true) or string.find(n, "spin", 1, true) or string.find(n, "fruit", 1, true) then
-					if rem:IsA("RemoteFunction") then
-						pcall(function() rem:InvokeServer("Censor") end)
-						pcall(function() rem:InvokeServer("RollFruit") end)
-					elseif rem:IsA("RemoteEvent") then
-						pcall(function() rem:FireServer("Censor") end)
-						pcall(function() rem:FireServer("RollFruit") end)
-					end
+		for _, rem in ipairs(CachedRollRemotes) do
+			if rem and rem.Parent then
+				if rem:IsA("RemoteFunction") then
+					pcall(function() rem:InvokeServer("Censor") end)
+				elseif rem:IsA("RemoteEvent") then
+					pcall(function() rem:FireServer("Censor") end)
 				end
 			end
 		end
@@ -1889,22 +1921,17 @@ end
 
 local function getNearestDroppedFruit(myPos)
 	local bestObj, bestPart, bestDist, bestName = nil, nil, math.huge, nil
-	pcall(function()
-		for _, obj in ipairs(Workspace:GetDescendants()) do
-			if isPickupableFruitInstance(obj) then
-				local part = getFruitAnchorPart(obj)
-				if part and part.Parent then
-					local d = (myPos - part.Position).Magnitude
-					if d < bestDist then
-						bestDist = d
-						bestObj = obj
-						bestPart = part
-						bestName = resolveBloxFruitName(obj.Name) or obj.Name
-					end
-				end
+	for _, entry in ipairs(CachedFruits) do
+		if entry.obj and entry.obj.Parent and entry.part and entry.part.Parent then
+			local d = (myPos - entry.part.Position).Magnitude
+			if d < bestDist then
+				bestDist = d
+				bestObj = entry.obj
+				bestPart = entry.part
+				bestName = entry.name
 			end
 		end
-	end)
+	end
 	return bestObj, bestPart, bestDist, bestName
 end
 
@@ -1953,9 +1980,9 @@ local function applyAimBot(root)
 	end)
 end
 
-local function triggerIndependentHit(char, cooldown)
+local function triggerIndependentHit(char, targetPart, cooldown)
 	local now = tick()
-	local cd = cooldown or 0.06
+	local cd = cooldown or 0.12
 	if (now - LastHitTick) < cd then
 		return
 	end
@@ -1966,11 +1993,10 @@ local function triggerIndependentHit(char, cooldown)
 		if tool then
 			tool:Activate()
 		end
-		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
-			if rem:IsA("RemoteEvent") then
-				local n = string.lower(rem.Name)
-				if string.find(n, "registerattack", 1, true) or string.find(n, "registerhit", 1, true) or string.find(n, "combat", 1, true) then
-					pcall(function() rem:FireServer(0) end)
+		if targetPart and targetPart.Parent then
+			for _, rem in ipairs(CachedCombatRemotes) do
+				if rem and rem.Parent and rem:IsA("RemoteEvent") then
+					pcall(function() rem:FireServer(targetPart) end)
 				end
 			end
 		end
@@ -2081,7 +2107,8 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, filterPredicate)
 		if not enemiesFolder then
 			return
 		end
-		local stackPos = mainEnemyRoot and (mainEnemyRoot.Position + Vector3.new(0, 1.5, 0)) or (centerPos + Vector3.new(0, -FarmHeightOffset, 0))
+		local baseStack = mainEnemyRoot and mainEnemyRoot.Position or (centerPos - Vector3.new(0, FarmHeightOffset, 0))
+		local idx = 0
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 			if enemy:IsA("Model") and (not filterPredicate or filterPredicate(enemy)) then
 				local eRoot = enemy:FindFirstChild("HumanoidRootPart")
@@ -2090,15 +2117,14 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, filterPredicate)
 					local dist = (centerPos - eRoot.Position).Magnitude
 					if dist <= BringRadius then
 						applyHitboxToEnemy(enemy)
-						for _, part in ipairs(enemy:GetDescendants()) do
-							if part:IsA("BasePart") then
-								part.CanCollide = false
-								part.AssemblyLinearVelocity = Vector3.zero
-								part.AssemblyAngularVelocity = Vector3.zero
-							end
+						if eRoot ~= mainEnemyRoot then
+							idx += 1
+							local angle = idx * 1.1
+							local offsetPos = baseStack + Vector3.new(math.cos(angle) * 3.5, 0, math.sin(angle) * 3.5)
+							eRoot.CanCollide = false
+							eRoot.AssemblyLinearVelocity = Vector3.zero
+							eRoot.CFrame = CFrame.new(offsetPos)
 						end
-						eRoot.Anchored = false
-						eRoot.CFrame = CFrame.new(stackPos)
 					end
 				end
 			end
@@ -2114,22 +2140,6 @@ local function getActiveSeaEvent(myPos)
 					local dist = (myPos - esp.Root.Position).Magnitude
 					if dist < 2500 then
 						return model.Name, math.floor(dist)
-					end
-				end
-			end
-		end
-		for _, folderName in ipairs({"SeaBeasts", "Enemies", "Boats"}) do
-			local folder = Workspace:FindFirstChild(folderName)
-			if folder then
-				for _, obj in ipairs(folder:GetChildren()) do
-					if obj and isSeaEvent(obj.Name) then
-						local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart", true)
-						if part then
-							local dist = (myPos - part.Position).Magnitude
-							if dist < 2500 then
-								return obj.Name, math.floor(dist)
-							end
-						end
 					end
 				end
 			end
@@ -2151,45 +2161,23 @@ local function getChestDisplayName(part)
 	return part and part.Name or "Chest"
 end
 
-local function isValidChestPart(part)
-	if not part or not part:IsA("BasePart") or not part.Parent then
-		return false
-	end
-	if part.Transparency >= 0.95 then
-		return false
-	end
-	local lowerName = string.lower(part.Name)
-	local parentLower = part.Parent and string.lower(part.Parent.Name) or ""
-	if string.find(lowerName, "hitbox", 1, true) or string.find(lowerName, "trigger", 1, true) then
-		return false
-	end
-	for _, allowed in ipairs(AllowedChestNames) do
-		local aLower = string.lower(allowed)
-		if lowerName == aLower or parentLower == aLower then
-			return true
-		end
-	end
-	return false
-end
-
 local function getNearestChest(myRoot)
 	local nearestPart, shortestDist = nil, math.huge
-	pcall(function()
-		for _, obj in ipairs(Workspace:GetDescendants()) do
-			if isValidChestPart(obj) then
-				local dist = (myRoot.Position - obj.Position).Magnitude
-				if dist < shortestDist then
-					shortestDist, nearestPart = dist, obj
-				end
+	for _, part in ipairs(CachedChests) do
+		if part and part.Parent and part.Transparency < 0.95 then
+			local dist = (myRoot.Position - part.Position).Magnitude
+			if dist < shortestDist then
+				shortestDist, nearestPart = dist, part
 			end
 		end
-	end)
+	end
 	return nearestPart, shortestDist
 end
 
 task.spawn(function()
+	rebuildRemoteCaches()
 	while ScriptRunning do
-		task.wait(0.12)
+		task.wait(0.25)
 		if AutoStoreFruitEnabled then
 			storeFruitsInInventory()
 		end
@@ -2205,8 +2193,7 @@ task.spawn(function()
 						if model and model.Parent and esp and esp.Root and esp.Humanoid and esp.Humanoid.Health > 0 then
 							if isSeaEvent(model.Name) and (myRoot.Position - esp.Root.Position).Magnitude < 250 then
 								applyHitboxToEnemy(model)
-								ensureEquippedIfNone()
-								triggerIndependentHit(myChar, 0.06)
+								triggerIndependentHit(myChar, esp.Root, 0.14)
 								break
 							end
 						end
@@ -2219,7 +2206,7 @@ end)
 
 task.spawn(function()
 	while ScriptRunning do
-		task.wait(0.05)
+		task.wait(0.06)
 		pcall(function()
 			local char = LocalPlayer.Character
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -2260,6 +2247,8 @@ RunService.Heartbeat:Connect(function(dt)
 			return
 		end
 
+		refreshWorldCaches(root.Position)
+
 		if AimBotEnabled then
 			applyAimBot(root)
 		end
@@ -2280,7 +2269,6 @@ RunService.Heartbeat:Connect(function(dt)
 				return
 			end
 			applyHitboxToEnemy(tChar)
-			ensureEquippedIfNone()
 			StatusLabel.Text = "●  PvP: " .. tostring(targetPlr.Name) .. " [" .. tostring(math.floor(tHum.Health)) .. " HP]"
 			StatusLabel.TextColor3 = DangerColor
 			local stickPos = tRoot.CFrame * CFrame.new(0, 0, 3.2)
@@ -2290,7 +2278,7 @@ RunService.Heartbeat:Connect(function(dt)
 				root.CFrame = goalCF
 			end
 			if (root.Position - tRoot.Position).Magnitude <= 35 then
-				triggerIndependentHit(char, 0.035)
+				triggerIndependentHit(char, tRoot, 0.1)
 			end
 			return
 		end
@@ -2302,7 +2290,7 @@ RunService.Heartbeat:Connect(function(dt)
 				StatusLabel.TextColor3 = FruitColor
 				local goalCF = CFrame.new(fruitPart.Position + Vector3.new(0, 1.5, 0))
 				stepTowardPosition(root, goalCF, math.max(FlySpeed, 140), dt)
-				if (root.Position - goalCF.Position).Magnitude <= 6 and (tick() - LastFruitPickupTick) > 0.15 then
+				if (root.Position - goalCF.Position).Magnitude <= 6 and (tick() - LastFruitPickupTick) > 0.2 then
 					LastFruitPickupTick = tick()
 					for _, desc in ipairs(fruitObj:GetDescendants()) do
 						if desc:IsA("ProximityPrompt") then
@@ -2321,7 +2309,7 @@ RunService.Heartbeat:Connect(function(dt)
 
 		if AutoChestEnabled then
 			local targetChest, dist = getNearestChest(root)
-			if targetChest and isValidChestPart(targetChest) then
+			if targetChest and targetChest.Parent then
 				StatusLabel.Text = "●  Chest: " .. tostring(getChestDisplayName(targetChest)) .. " [" .. tostring(math.floor(dist)) .. "m]"
 				StatusLabel.TextColor3 = ChestColor
 				local goalCF = CFrame.new(targetChest.Position + Vector3.new(0, 2.5, 0))
@@ -2335,7 +2323,6 @@ RunService.Heartbeat:Connect(function(dt)
 
 		if hasActiveTargetFarm() then
 			local myLvl = getPlayerLevel()
-			ensureEquippedIfNone()
 
 			if FarmBonesEnabled then
 				local bEnemy, bRoot, bHum = getNearestByPredicate(root.Position, isBoneEnemy, StayAndWaitRespawn and 340 or nil)
@@ -2350,8 +2337,8 @@ RunService.Heartbeat:Connect(function(dt)
 						root.CFrame = lookCF
 					end
 					bringMobsUnderPlayer(root.Position, bRoot, isBoneEnemy)
-					if (root.Position - bRoot.Position).Magnitude <= (FarmHeightOffset + 32) then
-						triggerIndependentHit(char, 0.06)
+					if (root.Position - bRoot.Position).Magnitude <= (FarmHeightOffset + 24) then
+						triggerIndependentHit(char, bRoot, 0.12)
 					end
 				else
 					local anchor = getHauntedCastleBonesPosition()
@@ -2375,8 +2362,8 @@ RunService.Heartbeat:Connect(function(dt)
 						root.CFrame = lookCF
 					end
 					bringMobsUnderPlayer(root.Position, sRoot, isDragonScaleEnemy)
-					if (root.Position - sRoot.Position).Magnitude <= (FarmHeightOffset + 32) then
-						triggerIndependentHit(char, 0.06)
+					if (root.Position - sRoot.Position).Magnitude <= (FarmHeightOffset + 24) then
+						triggerIndependentHit(char, sRoot, 0.12)
 					end
 				else
 					local anchor = getHydraDragonScalePosition()
@@ -2400,8 +2387,8 @@ RunService.Heartbeat:Connect(function(dt)
 						root.CFrame = lookCF
 					end
 					bringMobsUnderPlayer(root.Position, vRoot, isVampireEnemy)
-					if (root.Position - vRoot.Position).Magnitude <= (FarmHeightOffset + 32) then
-						triggerIndependentHit(char, 0.06)
+					if (root.Position - vRoot.Position).Magnitude <= (FarmHeightOffset + 24) then
+						triggerIndependentHit(char, vRoot, 0.12)
 					end
 				else
 					StatusLabel.Text = "●  Vampire • Waiting Respawn..."
@@ -2423,8 +2410,8 @@ RunService.Heartbeat:Connect(function(dt)
 						root.CFrame = lookCF
 					end
 					bringMobsUnderPlayer(root.Position, dRoot, isDemonicSoulEnemy)
-					if (root.Position - dRoot.Position).Magnitude <= (FarmHeightOffset + 32) then
-						triggerIndependentHit(char, 0.06)
+					if (root.Position - dRoot.Position).Magnitude <= (FarmHeightOffset + 24) then
+						triggerIndependentHit(char, dRoot, 0.12)
 					end
 				else
 					StatusLabel.Text = "●  Demonic Soul • Waiting Respawn..."
@@ -2458,8 +2445,8 @@ RunService.Heartbeat:Connect(function(dt)
 					return matchesMobEntry(m, plan.mob)
 				end
 				bringMobsUnderPlayer(root.Position, eRoot, mobFilter)
-				if (root.Position - eRoot.Position).Magnitude <= (FarmHeightOffset + 32) then
-					triggerIndependentHit(char, 0.06)
+				if (root.Position - eRoot.Position).Magnitude <= (FarmHeightOffset + 24) then
+					triggerIndependentHit(char, eRoot, 0.12)
 				end
 			else
 				local holdPos = findSpawnAnchorForMob(plan.mob.name, plan.anchor)
@@ -2599,7 +2586,7 @@ if Drawing then
 
 	local function addChest(part)
 		pcall(function()
-			if TrackedChests[part] or not isValidChestPart(part) then
+			if TrackedChests[part] then
 				return
 			end
 			TrackedChests[part] = {
@@ -2662,21 +2649,16 @@ if Drawing then
 				end
 				if obj:IsA("Model") then
 					addNPC(obj)
-					if isValidChestPart(obj.PrimaryPart) then
-						addChest(obj.PrimaryPart)
-					end
 					for _, desc in ipairs(obj:GetDescendants()) do
-						if isValidChestPart(desc) then
+						if desc:IsA("BasePart") and string.find(string.lower(desc.Name), "chest", 1, true) then
 							addChest(desc)
 						end
 						if isPickupableFruitInstance(desc) then
 							addFruit(desc)
 						end
 					end
-				elseif obj:IsA("BasePart") then
-					if isValidChestPart(obj) then
-						addChest(obj)
-					end
+				elseif obj:IsA("BasePart") and string.find(string.lower(obj.Name), "chest", 1, true) then
+					addChest(obj)
 				elseif obj:IsA("Folder") then
 					scanFolder(obj)
 				end
@@ -2695,7 +2677,7 @@ if Drawing then
 				end
 			elseif obj:IsA("BasePart") then
 				task.wait(0.1)
-				if isValidChestPart(obj) then
+				if string.find(string.lower(obj.Name), "chest", 1, true) then
 					addChest(obj)
 				elseif isPickupableFruitInstance(obj) then
 					addFruit(obj)
@@ -2808,7 +2790,7 @@ if Drawing then
 			end
 
 			for part, esp in pairs(TrackedChests) do
-				if not isValidChestPart(part) then
+				if not part or not part.Parent then
 					removeChest(part)
 				elseif not ChestESPEnabled or not esp.Text then
 					if esp.Text then
@@ -2854,4 +2836,4 @@ if Drawing then
 	end)
 end
 
-print("[NEXOARO AI V7] Loaded")
+print("[NEXOARO AI V7.1] Loaded")
