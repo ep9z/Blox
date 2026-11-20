@@ -37,7 +37,7 @@ local TargetWalkSpeed = 100
 local AutoQuestFarmEnabled = false
 local FarmVampireEnabled = false
 local FarmDemonicSoulEnabled = false
-local FarmDragonCrewWarriorEnabled = false
+local FarmDragonScaleEnabled = false
 local BringMobsEnabled = true
 local AutoQuestEnabled = true
 local ESPEnabled = true
@@ -58,6 +58,8 @@ local LastHitTick = 0
 local LastPvPClickTick = 0
 local LastRollTick = 0
 local LastStoreTick = 0
+
+local HydraIslandFallbackPos = Vector3.new(5750, 610, -280)
 
 local AllowedChestNames = {
 	"GoldChest",
@@ -152,11 +154,41 @@ local function isDemonicSoulEnemy(model)
 	return string.find(string.lower(tostring(model.Name)), "demonic soul") ~= nil
 end
 
-local function isDragonCrewWarriorEnemy(model)
+local function isDragonScaleEnemy(model)
 	if not model or not model.Name then
 		return false
 	end
-	return string.find(string.lower(tostring(model.Name)), "dragon crew warrior") ~= nil
+	local lower = string.lower(tostring(model.Name))
+	return string.find(lower, "dragon crew warrior") ~= nil or string.find(lower, "dragon crew archer") ~= nil
+end
+
+local function getHydraDragonScalePosition()
+	local ok, pos = pcall(function()
+		local map = Workspace:FindFirstChild("Map")
+		if map then
+			local hydra = map:FindFirstChild("HydraIsland") or map:FindFirstChild("Hydra Island") or map:FindFirstChild("Hydra")
+			if hydra then
+				local part = hydra:IsA("BasePart") and hydra or hydra.PrimaryPart or hydra:FindFirstChildWhichIsA("BasePart", true)
+				if part then
+					return part.Position + Vector3.new(0, 120, 0)
+				end
+			end
+		end
+		local spawns = Workspace:FindFirstChild("_WorldOrigin") and Workspace._WorldOrigin:FindFirstChild("EnemySpawns")
+		if spawns then
+			for _, sp in ipairs(spawns:GetChildren()) do
+				local lower = string.lower(sp.Name)
+				if string.find(lower, "dragon crew warrior") or string.find(lower, "dragon crew archer") then
+					local part = sp:IsA("BasePart") and sp or sp:FindFirstChildWhichIsA("BasePart", true)
+					if part then
+						return part.Position + Vector3.new(0, 15, 0)
+					end
+				end
+			end
+		end
+		return HydraIslandFallbackPos
+	end)
+	return (ok and pos) or HydraIslandFallbackPos
 end
 
 local function resolveBloxFruitName(rawName)
@@ -237,7 +269,7 @@ local function getFruitAnchorPart(obj)
 end
 
 local function hasActiveTargetFarm()
-	return AutoQuestFarmEnabled or FarmVampireEnabled or FarmDemonicSoulEnabled or FarmDragonCrewWarriorEnabled
+	return AutoQuestFarmEnabled or FarmVampireEnabled or FarmDemonicSoulEnabled or FarmDragonScaleEnabled
 end
 
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -916,8 +948,8 @@ createToggle(Container2, "Farm Demonic Soul", 76, false, function(state)
 		CurrentTween = nil
 	end
 end)
-createToggle(Container2, "Farm Dragon Crew Warriors", 114, false, function(state)
-	FarmDragonCrewWarriorEnabled = state
+createToggle(Container2, "Auto farm dragon scale", 114, false, function(state)
+	FarmDragonScaleEnabled = state
 	if not hasActiveTargetFarm() and CurrentTween then
 		pcall(function() CurrentTween:Cancel() end)
 		CurrentTween = nil
@@ -1849,11 +1881,21 @@ task.spawn(function()
 				local myLvl = getPlayerLevel()
 				ensureEquippedIfNone()
 
-				if FarmDragonCrewWarriorEnabled then
-					local warriorEnemy, wRoot, wHum = getNearestByPredicate(root.Position, isDragonCrewWarriorEnemy)
-					if not farmTargetModel(char, root, warriorEnemy, wRoot, wHum, "Dragon Crew Warrior", Color3.fromRGB(249, 115, 22)) then
-						StatusLabel.Text = "●  Searching Dragon Crew Warriors..."
-						StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+				if FarmDragonScaleEnabled then
+					local scaleEnemy, sRoot, sHum = getNearestByPredicate(root.Position, isDragonScaleEnemy)
+					if not farmTargetModel(char, root, scaleEnemy, sRoot, sHum, "Dragon Scale Farm", Color3.fromRGB(249, 115, 22)) then
+						local hydraPos = getHydraDragonScalePosition()
+						local distToHydra = (root.Position - hydraPos).Magnitude
+						StatusLabel.Text = "●  Flying to Hydra Island [" .. tostring(math.floor(distToHydra)) .. "m]..."
+						StatusLabel.TextColor3 = Color3.fromRGB(249, 115, 22)
+						if distToHydra > 15 then
+							local dur = math.clamp(distToHydra / math.max(FlySpeed, 60), 0.05, 8)
+							if CurrentTween then
+								pcall(function() CurrentTween:Cancel() end)
+							end
+							CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = CFrame.new(hydraPos)})
+							CurrentTween:Play()
+						end
 					end
 					return
 				end
