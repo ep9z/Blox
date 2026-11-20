@@ -38,6 +38,7 @@ local AutoQuestFarmEnabled = false
 local FarmVampireEnabled = false
 local FarmDemonicSoulEnabled = false
 local FarmDragonScaleEnabled = false
+local FarmBonesEnabled = false
 local BringMobsEnabled = true
 local AutoQuestEnabled = true
 local ESPEnabled = true
@@ -60,6 +61,7 @@ local LastRollTick = 0
 local LastStoreTick = 0
 
 local HydraIslandFallbackPos = Vector3.new(5750, 610, -280)
+local HauntedCastleFallbackPos = Vector3.new(-9500, 145, 6080)
 
 local AllowedChestNames = {
 	"GoldChest",
@@ -162,6 +164,14 @@ local function isDragonScaleEnemy(model)
 	return string.find(lower, "dragon crew warrior") ~= nil or string.find(lower, "dragon crew archer") ~= nil
 end
 
+local function isBoneEnemy(model)
+	if not model or not model.Name then
+		return false
+	end
+	local lower = string.lower(tostring(model.Name))
+	return string.find(lower, "reborn skeleton") ~= nil or string.find(lower, "living zombie") ~= nil or string.find(lower, "demonic soul") ~= nil or string.find(lower, "posessed mummy") ~= nil or string.find(lower, "possessed mummy") ~= nil
+end
+
 local function getHydraDragonScalePosition()
 	local ok, pos = pcall(function()
 		local map = Workspace:FindFirstChild("Map")
@@ -189,6 +199,35 @@ local function getHydraDragonScalePosition()
 		return HydraIslandFallbackPos
 	end)
 	return (ok and pos) or HydraIslandFallbackPos
+end
+
+local function getHauntedCastleBonesPosition()
+	local ok, pos = pcall(function()
+		local map = Workspace:FindFirstChild("Map")
+		if map then
+			local castle = map:FindFirstChild("HauntedCastle") or map:FindFirstChild("Haunted Castle")
+			if castle then
+				local part = castle:IsA("BasePart") and castle or castle.PrimaryPart or castle:FindFirstChildWhichIsA("BasePart", true)
+				if part then
+					return part.Position + Vector3.new(0, 35, 0)
+				end
+			end
+		end
+		local spawns = Workspace:FindFirstChild("_WorldOrigin") and Workspace._WorldOrigin:FindFirstChild("EnemySpawns")
+		if spawns then
+			for _, sp in ipairs(spawns:GetChildren()) do
+				local lower = string.lower(sp.Name)
+				if string.find(lower, "reborn skeleton") then
+					local part = sp:IsA("BasePart") and sp or sp:FindFirstChildWhichIsA("BasePart", true)
+					if part then
+						return part.Position + Vector3.new(0, 12, 0)
+					end
+				end
+			end
+		end
+		return HauntedCastleFallbackPos
+	end)
+	return (ok and pos) or HauntedCastleFallbackPos
 end
 
 local function resolveBloxFruitName(rawName)
@@ -269,7 +308,7 @@ local function getFruitAnchorPart(obj)
 end
 
 local function hasActiveTargetFarm()
-	return AutoQuestFarmEnabled or FarmVampireEnabled or FarmDemonicSoulEnabled or FarmDragonScaleEnabled
+	return AutoQuestFarmEnabled or FarmVampireEnabled or FarmDemonicSoulEnabled or FarmDragonScaleEnabled or FarmBonesEnabled
 end
 
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -541,7 +580,7 @@ Container2.Position = Container1.Position
 Container2.BackgroundTransparency = 1
 Container2.ScrollBarThickness = 3
 Container2.ScrollBarImageColor3 = ThemeColor
-Container2.CanvasSize = UDim2.new(0, 0, 0, 305)
+Container2.CanvasSize = UDim2.new(0, 0, 0, 345)
 Container2.Visible = false
 Container2.Parent = MainFrame
 
@@ -955,13 +994,20 @@ createToggle(Container2, "Auto farm dragon scale", 114, false, function(state)
 		CurrentTween = nil
 	end
 end)
-createToggle(Container2, "Bring Mobs Under You", 152, true, function(state)
+createToggle(Container2, "Auto Farm Bones", 152, false, function(state)
+	FarmBonesEnabled = state
+	if not hasActiveTargetFarm() and CurrentTween then
+		pcall(function() CurrentTween:Cancel() end)
+		CurrentTween = nil
+	end
+end)
+createToggle(Container2, "Bring Mobs Under You", 190, true, function(state)
 	BringMobsEnabled = state
 end)
-createToggle(Container2, "Auto Quest (Level Based)", 190, true, function(state)
+createToggle(Container2, "Auto Quest (Level Based)", 228, true, function(state)
 	AutoQuestEnabled = state
 end)
-createSlider(Container2, 228, "Farm Fly Speed", 60, 800, FlySpeed, function(val)
+createSlider(Container2, 266, "Farm Fly Speed", 60, 800, FlySpeed, function(val)
 	FlySpeed = val
 end)
 
@@ -1880,6 +1926,25 @@ task.spawn(function()
 
 				local myLvl = getPlayerLevel()
 				ensureEquippedIfNone()
+
+				if FarmBonesEnabled then
+					local boneEnemy, bRoot, bHum = getNearestByPredicate(root.Position, isBoneEnemy)
+					if not farmTargetModel(char, root, boneEnemy, bRoot, bHum, "Bones Farm", Color3.fromRGB(226, 232, 240)) then
+						local castlePos = getHauntedCastleBonesPosition()
+						local distToCastle = (root.Position - castlePos).Magnitude
+						StatusLabel.Text = "●  Flying to Haunted Castle [" .. tostring(math.floor(distToCastle)) .. "m]..."
+						StatusLabel.TextColor3 = Color3.fromRGB(226, 232, 240)
+						if distToCastle > 15 then
+							local dur = math.clamp(distToCastle / math.max(FlySpeed, 60), 0.05, 8)
+							if CurrentTween then
+								pcall(function() CurrentTween:Cancel() end)
+							end
+							CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = CFrame.new(castlePos)})
+							CurrentTween:Play()
+						end
+					end
+					return
+				end
 
 				if FarmDragonScaleEnabled then
 					local scaleEnemy, sRoot, sHum = getNearestByPredicate(root.Position, isDragonScaleEnemy)
