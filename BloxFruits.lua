@@ -4,12 +4,6 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
-local VirtualUser = game:GetService("VirtualUser")
-
-local VirtualInputManager = nil
-pcall(function()
-	VirtualInputManager = game:GetService("VirtualInputManager")
-end)
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
@@ -42,6 +36,7 @@ local TargetWalkSpeed = 120
 local AutoQuestFarmEnabled = false
 local AIFarmModeEnabled = true
 local StayAndWaitRespawn = true
+local HitboxExpanderEnabled = true
 local FarmVampireEnabled = false
 local FarmDemonicSoulEnabled = false
 local FarmDragonScaleEnabled = false
@@ -61,17 +56,18 @@ local AimBotEnabled = false
 local PvPSpeed = 350
 local SelectedPvPPlayer = nil
 local FlySpeed = 320
+local FarmHeightOffset = 22
 local BringRadius = 280
 local SelectedWorldFilter = "Auto"
 local ScriptRunning = true
 
 local LastHitTick = 0
-local LastPvPClickTick = 0
 local LastRollTick = 0
 local LastStoreTick = 0
 local LastQuestTick = 0
 local LastFruitPickupTick = 0
 local SavedFogState = nil
+local ExpandedHitboxes = {}
 
 local HydraIslandFallbackPos = Vector3.new(5750, 610, -280)
 local HauntedCastleFallbackPos = Vector3.new(-9500, 145, 6080)
@@ -805,17 +801,47 @@ local function stepTowardPosition(root, goalCFrame, speed, dt)
 	root.AssemblyAngularVelocity = Vector3.zero
 end
 
+local function resetExpandedHitboxes()
+	for part, origSize in pairs(ExpandedHitboxes) do
+		pcall(function()
+			if part and part.Parent then
+				part.Size = origSize
+				part.Transparency = 1
+			end
+		end)
+	end
+	table.clear(ExpandedHitboxes)
+end
+
+local function applyHitboxToEnemy(enemyModel)
+	if not HitboxExpanderEnabled or not enemyModel then
+		return
+	end
+	pcall(function()
+		local hrp = enemyModel:FindFirstChild("HumanoidRootPart")
+		if hrp and hrp:IsA("BasePart") then
+			if not ExpandedHitboxes[hrp] then
+				ExpandedHitboxes[hrp] = hrp.Size
+			end
+			hrp.Size = Vector3.new(28, 28, 28)
+			hrp.Transparency = 1
+			hrp.CanCollide = false
+			hrp.Massless = true
+		end
+	end)
+end
+
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 pcall(function()
 	for _, gui in ipairs(playerGui:GetChildren()) do
-		if gui.Name == "NexoaroHubV6" or gui.Name == "NexoaroHubV5" or gui.Name == "NexoaroHubV4" or gui.Name == "NexoaroHubV3" or gui.Name == "NexoaroController" then
+		if gui.Name == "NexoaroHubV7" or gui.Name == "NexoaroHubV6" or gui.Name == "NexoaroHubV5" or gui.Name == "NexoaroHubV4" or gui.Name == "NexoaroHubV3" or gui.Name == "NexoaroController" then
 			gui:Destroy()
 		end
 	end
 end)
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "NexoaroHubV6"
+ScreenGui.Name = "NexoaroHubV7"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 999
@@ -924,7 +950,7 @@ subStroke.Transparency = 0.45
 local SubTitle = Instance.new("TextLabel")
 SubTitle.Size = UDim2.new(1, 0, 1, 0)
 SubTitle.BackgroundTransparency = 1
-SubTitle.Text = "AI WORLDS • V6"
+SubTitle.Text = "AI WORLDS • V7"
 SubTitle.TextColor3 = AccentCyan
 SubTitle.Font = Enum.Font.GothamBold
 SubTitle.TextSize = 8.5
@@ -956,7 +982,7 @@ local OpenPill = Instance.new("TextButton")
 OpenPill.Size = UDim2.new(0, 134, 0, 34)
 OpenPill.Position = UDim2.new(0.02, 0, 0.1, 0)
 OpenPill.BackgroundColor3 = BgPanel
-OpenPill.Text = "⚡ NEXOARO AI V6"
+OpenPill.Text = "⚡ NEXOARO AI V7"
 OpenPill.TextColor3 = AccentCyan
 OpenPill.Font = Enum.Font.GothamBold
 OpenPill.TextSize = 11
@@ -980,6 +1006,7 @@ end)
 ExitBtn.MouseButton1Click:Connect(function()
 	ScriptRunning = false
 	LockedSailDir = nil
+	resetExpandedHitboxes()
 	if RemoveFogEnabled then
 		RemoveFogEnabled = false
 		restoreOriginalFogState()
@@ -1087,7 +1114,7 @@ Container2.Position = Container1.Position
 Container2.BackgroundTransparency = 1
 Container2.ScrollBarThickness = 3
 Container2.ScrollBarImageColor3 = AccentCyan
-Container2.CanvasSize = UDim2.new(0, 0, 0, 510)
+Container2.CanvasSize = UDim2.new(0, 0, 0, 630)
 Container2.Visible = false
 Container2.Parent = MainFrame
 
@@ -1481,13 +1508,20 @@ end)
 createToggle(Container2, "Auto Farm (AI Smart Target)", 38, false, function(state) AutoQuestFarmEnabled = state end)
 createToggle(Container2, "AI Target & Cluster Scoring", 76, true, function(state) AIFarmModeEnabled = state end)
 createToggle(Container2, "Stay & Wait Respawn (No Island Hop)", 114, true, function(state) StayAndWaitRespawn = state end)
-createToggle(Container2, "Farm Vampire (Fangs)", 152, false, function(state) FarmVampireEnabled = state end)
-createToggle(Container2, "Farm Demonic Soul", 190, false, function(state) FarmDemonicSoulEnabled = state end)
-createToggle(Container2, "Auto Farm Dragon Scale", 228, false, function(state) FarmDragonScaleEnabled = state end)
-createToggle(Container2, "Auto Farm Bones", 266, false, function(state) FarmBonesEnabled = state end)
-createToggle(Container2, "Bring Mobs Under You", 304, true, function(state) BringMobsEnabled = state end)
-createToggle(Container2, "Auto Quest (Level Bracket)", 342, true, function(state) AutoQuestEnabled = state end)
-createSlider(Container2, 380, "Farm Fly Speed", 60, 800, FlySpeed, function(val) FlySpeed = val end)
+createToggle(Container2, "Hitbox Expander (Big Hitbox)", 152, true, function(state)
+	HitboxExpanderEnabled = state
+	if not state then
+		resetExpandedHitboxes()
+	end
+end)
+createToggle(Container2, "Farm Vampire (Fangs)", 190, false, function(state) FarmVampireEnabled = state end)
+createToggle(Container2, "Farm Demonic Soul", 228, false, function(state) FarmDemonicSoulEnabled = state end)
+createToggle(Container2, "Auto Farm Dragon Scale", 266, false, function(state) FarmDragonScaleEnabled = state end)
+createToggle(Container2, "Auto Farm Bones", 304, false, function(state) FarmBonesEnabled = state end)
+createToggle(Container2, "Bring Mobs Under You", 342, true, function(state) BringMobsEnabled = state end)
+createToggle(Container2, "Auto Quest (Level Bracket)", 380, true, function(state) AutoQuestEnabled = state end)
+createSlider(Container2, 418, "Farm Fly Speed", 60, 800, FlySpeed, function(val) FlySpeed = val end)
+createSlider(Container2, 466, "Height Above Mob", 6, 120, FarmHeightOffset, function(val) FarmHeightOffset = val end)
 
 createToggle(Container3, "Walk Speed Boost", 0, false, function(state)
 	WalkSpeedEnabled = state
@@ -1680,8 +1714,14 @@ end)
 LocalPlayer.Idled:Connect(function()
 	if ScriptRunning and AntiAFKEnabled then
 		pcall(function()
-			VirtualUser:CaptureController()
-			VirtualUser:ClickButton2(Vector2.new())
+			for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
+				if rem:IsA("RemoteEvent") then
+					local n = string.lower(rem.Name)
+					if string.find(n, "afk", 1, true) or string.find(n, "idle", 1, true) then
+						pcall(function() rem:FireServer() end)
+					end
+				end
+			end
 		end)
 	end
 end)
@@ -1868,19 +1908,6 @@ local function getNearestDroppedFruit(myPos)
 	return bestObj, bestPart, bestDist, bestName
 end
 
-local function isPointerOverUI()
-	local ok, over = pcall(function()
-		if not MainFrame.Visible then
-			return false
-		end
-		local mousePos = UserInputService:GetMouseLocation()
-		local topLeft = MainFrame.AbsolutePosition
-		local bottomRight = topLeft + MainFrame.AbsoluteSize
-		return mousePos.X >= topLeft.X and mousePos.X <= bottomRight.X and mousePos.Y >= topLeft.Y and mousePos.Y <= bottomRight.Y
-	end)
-	return ok and over or false
-end
-
 local function getAimTargetPart(myRoot)
 	local targetPlr = SelectedPvPPlayer
 	if targetPlr and targetPlr.Parent and targetPlr ~= LocalPlayer then
@@ -1926,38 +1953,10 @@ local function applyAimBot(root)
 	end)
 end
 
-local function triggerAutoClickerHit(char)
+local function triggerIndependentHit(char, cooldown)
 	local now = tick()
-	if (now - LastPvPClickTick) < 0.025 then
-		return
-	end
-	LastPvPClickTick = now
-	pcall(function()
-		ensureEquippedIfNone()
-		local tool = char and char:FindFirstChildOfClass("Tool")
-		if tool then
-			tool:Activate()
-		end
-		local x = Camera.ViewportSize.X * 0.5
-		local y = Camera.ViewportSize.Y * 0.5
-		if VirtualInputManager then
-			VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
-			VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
-		end
-		VirtualUser:CaptureController()
-		VirtualUser:ClickButton1(Vector2.new(x, y))
-		if mouse1click then
-			mouse1click()
-		end
-	end)
-end
-
-local function triggerHit(char)
-	if isPointerOverUI() then
-		return
-	end
-	local now = tick()
-	if (now - LastHitTick) < 0.065 then
+	local cd = cooldown or 0.06
+	if (now - LastHitTick) < cd then
 		return
 	end
 	LastHitTick = now
@@ -1967,16 +1966,13 @@ local function triggerHit(char)
 		if tool then
 			tool:Activate()
 		end
-		local x = Camera.ViewportSize.X * 0.5
-		local y = Camera.ViewportSize.Y * 0.5
-		if VirtualInputManager then
-			VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
-			VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
-		end
-		VirtualUser:CaptureController()
-		VirtualUser:ClickButton1(Vector2.new(x, y))
-		if mouse1click then
-			mouse1click()
+		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
+			if rem:IsA("RemoteEvent") then
+				local n = string.lower(rem.Name)
+				if string.find(n, "registerattack", 1, true) or string.find(n, "registerhit", 1, true) or string.find(n, "combat", 1, true) then
+					pcall(function() rem:FireServer(0) end)
+				end
+			end
 		end
 	end)
 end
@@ -2085,7 +2081,7 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, filterPredicate)
 		if not enemiesFolder then
 			return
 		end
-		local stackPos = mainEnemyRoot and (mainEnemyRoot.Position + Vector3.new(0, 1.5, 0)) or (centerPos + Vector3.new(0, -6.5, 0))
+		local stackPos = mainEnemyRoot and (mainEnemyRoot.Position + Vector3.new(0, 1.5, 0)) or (centerPos + Vector3.new(0, -FarmHeightOffset, 0))
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 			if enemy:IsA("Model") and (not filterPredicate or filterPredicate(enemy)) then
 				local eRoot = enemy:FindFirstChild("HumanoidRootPart")
@@ -2093,6 +2089,7 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, filterPredicate)
 				if eRoot and eHum and eHum.Health > 0 then
 					local dist = (centerPos - eRoot.Position).Magnitude
 					if dist <= BringRadius then
+						applyHitboxToEnemy(enemy)
 						for _, part in ipairs(enemy:GetDescendants()) do
 							if part:IsA("BasePart") then
 								part.CanCollide = false
@@ -2207,8 +2204,9 @@ task.spawn(function()
 					for model, esp in pairs(TrackedNPCs) do
 						if model and model.Parent and esp and esp.Root and esp.Humanoid and esp.Humanoid.Health > 0 then
 							if isSeaEvent(model.Name) and (myRoot.Position - esp.Root.Position).Magnitude < 250 then
+								applyHitboxToEnemy(model)
 								ensureEquippedIfNone()
-								triggerHit(myChar)
+								triggerIndependentHit(myChar, 0.06)
 								break
 							end
 						end
@@ -2281,6 +2279,7 @@ RunService.Heartbeat:Connect(function(dt)
 				StatusLabel.TextColor3 = WarnColor
 				return
 			end
+			applyHitboxToEnemy(tChar)
 			ensureEquippedIfNone()
 			StatusLabel.Text = "●  PvP: " .. tostring(targetPlr.Name) .. " [" .. tostring(math.floor(tHum.Health)) .. " HP]"
 			StatusLabel.TextColor3 = DangerColor
@@ -2289,10 +2288,9 @@ RunService.Heartbeat:Connect(function(dt)
 			stepTowardPosition(root, goalCF, PvPSpeed, dt)
 			if (root.Position - tRoot.Position).Magnitude <= 8 then
 				root.CFrame = goalCF
-				Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
 			end
-			if (root.Position - tRoot.Position).Magnitude <= 24 then
-				triggerAutoClickerHit(char)
+			if (root.Position - tRoot.Position).Magnitude <= 35 then
+				triggerIndependentHit(char, 0.035)
 			end
 			return
 		end
@@ -2342,18 +2340,18 @@ RunService.Heartbeat:Connect(function(dt)
 			if FarmBonesEnabled then
 				local bEnemy, bRoot, bHum = getNearestByPredicate(root.Position, isBoneEnemy, StayAndWaitRespawn and 340 or nil)
 				if bEnemy and bRoot and bHum and bHum.Health > 0 then
-					StatusLabel.Text = "●  AI Bones • " .. tostring(bEnemy.Name)
+					applyHitboxToEnemy(bEnemy)
+					StatusLabel.Text = "●  AI Bones • " .. tostring(bEnemy.Name) .. " [+" .. tostring(FarmHeightOffset) .. "]"
 					StatusLabel.TextColor3 = Color3.fromRGB(226, 232, 240)
-					local targetPos = bRoot.Position + Vector3.new(0, 6.2, 0)
+					local targetPos = bRoot.Position + Vector3.new(0, FarmHeightOffset, 0)
 					local lookCF = CFrame.lookAt(targetPos, bRoot.Position)
 					stepTowardPosition(root, lookCF, FlySpeed, dt)
-					if (root.Position - targetPos).Magnitude <= 6.5 then
+					if (root.Position - targetPos).Magnitude <= 8 then
 						root.CFrame = lookCF
-						Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, bRoot.Position)
 					end
 					bringMobsUnderPlayer(root.Position, bRoot, isBoneEnemy)
-					if (root.Position - bRoot.Position).Magnitude <= 26 then
-						triggerHit(char)
+					if (root.Position - bRoot.Position).Magnitude <= (FarmHeightOffset + 32) then
+						triggerIndependentHit(char, 0.06)
 					end
 				else
 					local anchor = getHauntedCastleBonesPosition()
@@ -2367,18 +2365,18 @@ RunService.Heartbeat:Connect(function(dt)
 			if FarmDragonScaleEnabled then
 				local sEnemy, sRoot, sHum = getNearestByPredicate(root.Position, isDragonScaleEnemy, StayAndWaitRespawn and 340 or nil)
 				if sEnemy and sRoot and sHum and sHum.Health > 0 then
-					StatusLabel.Text = "●  AI Dragon Scale • " .. tostring(sEnemy.Name)
+					applyHitboxToEnemy(sEnemy)
+					StatusLabel.Text = "●  AI Dragon Scale • " .. tostring(sEnemy.Name) .. " [+" .. tostring(FarmHeightOffset) .. "]"
 					StatusLabel.TextColor3 = Color3.fromRGB(251, 146, 60)
-					local targetPos = sRoot.Position + Vector3.new(0, 6.2, 0)
+					local targetPos = sRoot.Position + Vector3.new(0, FarmHeightOffset, 0)
 					local lookCF = CFrame.lookAt(targetPos, sRoot.Position)
 					stepTowardPosition(root, lookCF, FlySpeed, dt)
-					if (root.Position - targetPos).Magnitude <= 6.5 then
+					if (root.Position - targetPos).Magnitude <= 8 then
 						root.CFrame = lookCF
-						Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, sRoot.Position)
 					end
 					bringMobsUnderPlayer(root.Position, sRoot, isDragonScaleEnemy)
-					if (root.Position - sRoot.Position).Magnitude <= 26 then
-						triggerHit(char)
+					if (root.Position - sRoot.Position).Magnitude <= (FarmHeightOffset + 32) then
+						triggerIndependentHit(char, 0.06)
 					end
 				else
 					local anchor = getHydraDragonScalePosition()
@@ -2392,18 +2390,18 @@ RunService.Heartbeat:Connect(function(dt)
 			if FarmVampireEnabled then
 				local vEnemy, vRoot, vHum = getNearestByPredicate(root.Position, isVampireEnemy, StayAndWaitRespawn and 340 or nil)
 				if vEnemy and vRoot and vHum and vHum.Health > 0 then
-					StatusLabel.Text = "●  AI Vampire • " .. tostring(vEnemy.Name)
+					applyHitboxToEnemy(vEnemy)
+					StatusLabel.Text = "●  AI Vampire • " .. tostring(vEnemy.Name) .. " [+" .. tostring(FarmHeightOffset) .. "]"
 					StatusLabel.TextColor3 = DangerColor
-					local targetPos = vRoot.Position + Vector3.new(0, 6.2, 0)
+					local targetPos = vRoot.Position + Vector3.new(0, FarmHeightOffset, 0)
 					local lookCF = CFrame.lookAt(targetPos, vRoot.Position)
 					stepTowardPosition(root, lookCF, FlySpeed, dt)
-					if (root.Position - targetPos).Magnitude <= 6.5 then
+					if (root.Position - targetPos).Magnitude <= 8 then
 						root.CFrame = lookCF
-						Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, vRoot.Position)
 					end
 					bringMobsUnderPlayer(root.Position, vRoot, isVampireEnemy)
-					if (root.Position - vRoot.Position).Magnitude <= 26 then
-						triggerHit(char)
+					if (root.Position - vRoot.Position).Magnitude <= (FarmHeightOffset + 32) then
+						triggerIndependentHit(char, 0.06)
 					end
 				else
 					StatusLabel.Text = "●  Vampire • Waiting Respawn..."
@@ -2415,18 +2413,18 @@ RunService.Heartbeat:Connect(function(dt)
 			if FarmDemonicSoulEnabled then
 				local dEnemy, dRoot, dHum = getNearestByPredicate(root.Position, isDemonicSoulEnemy, StayAndWaitRespawn and 340 or nil)
 				if dEnemy and dRoot and dHum and dHum.Health > 0 then
-					StatusLabel.Text = "●  AI Demonic Soul • " .. tostring(dEnemy.Name)
+					applyHitboxToEnemy(dEnemy)
+					StatusLabel.Text = "●  AI Demonic Soul • " .. tostring(dEnemy.Name) .. " [+" .. tostring(FarmHeightOffset) .. "]"
 					StatusLabel.TextColor3 = FruitColor
-					local targetPos = dRoot.Position + Vector3.new(0, 6.2, 0)
+					local targetPos = dRoot.Position + Vector3.new(0, FarmHeightOffset, 0)
 					local lookCF = CFrame.lookAt(targetPos, dRoot.Position)
 					stepTowardPosition(root, lookCF, FlySpeed, dt)
-					if (root.Position - targetPos).Magnitude <= 6.5 then
+					if (root.Position - targetPos).Magnitude <= 8 then
 						root.CFrame = lookCF
-						Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, dRoot.Position)
 					end
 					bringMobsUnderPlayer(root.Position, dRoot, isDemonicSoulEnemy)
-					if (root.Position - dRoot.Position).Magnitude <= 26 then
-						triggerHit(char)
+					if (root.Position - dRoot.Position).Magnitude <= (FarmHeightOffset + 32) then
+						triggerIndependentHit(char, 0.06)
 					end
 				else
 					StatusLabel.Text = "●  Demonic Soul • Waiting Respawn..."
@@ -2447,21 +2445,21 @@ RunService.Heartbeat:Connect(function(dt)
 			end
 
 			if targetEnemy and eRoot and eHum and eHum.Health > 0 then
+				applyHitboxToEnemy(targetEnemy)
 				StatusLabel.Text = "●  " .. tostring(plan.world) .. " • Lv." .. tostring(myLvl) .. " " .. bracketTag .. " • " .. tostring(targetEnemy.Name)
 				StatusLabel.TextColor3 = SuccessColor
-				local targetPos = eRoot.Position + Vector3.new(0, 6.2, 0)
+				local targetPos = eRoot.Position + Vector3.new(0, FarmHeightOffset, 0)
 				local lookCF = CFrame.lookAt(targetPos, eRoot.Position)
 				stepTowardPosition(root, lookCF, FlySpeed, dt)
-				if (root.Position - targetPos).Magnitude <= 6.5 then
+				if (root.Position - targetPos).Magnitude <= 8 then
 					root.CFrame = lookCF
-					Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, eRoot.Position)
 				end
 				local mobFilter = function(m)
 					return matchesMobEntry(m, plan.mob)
 				end
 				bringMobsUnderPlayer(root.Position, eRoot, mobFilter)
-				if (root.Position - eRoot.Position).Magnitude <= 26 then
-					triggerHit(char)
+				if (root.Position - eRoot.Position).Magnitude <= (FarmHeightOffset + 32) then
+					triggerIndependentHit(char, 0.06)
 				end
 			else
 				local holdPos = findSpawnAnchorForMob(plan.mob.name, plan.anchor)
@@ -2856,4 +2854,4 @@ if Drawing then
 	end)
 end
 
-print("[NEXOARO AI V6] Loaded")
+print("[NEXOARO AI V7] Loaded")
