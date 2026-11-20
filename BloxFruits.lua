@@ -37,6 +37,7 @@ local TargetWalkSpeed = 100
 local AutoQuestFarmEnabled = false
 local FarmVampireEnabled = false
 local FarmDemonicSoulEnabled = false
+local FarmDragonCrewWarriorEnabled = false
 local BringMobsEnabled = true
 local AutoQuestEnabled = true
 local ESPEnabled = true
@@ -151,6 +152,13 @@ local function isDemonicSoulEnemy(model)
 	return string.find(string.lower(tostring(model.Name)), "demonic soul") ~= nil
 end
 
+local function isDragonCrewWarriorEnemy(model)
+	if not model or not model.Name then
+		return false
+	end
+	return string.find(string.lower(tostring(model.Name)), "dragon crew warrior") ~= nil
+end
+
 local function resolveBloxFruitName(rawName)
 	if not rawName then
 		return nil
@@ -229,7 +237,7 @@ local function getFruitAnchorPart(obj)
 end
 
 local function hasActiveTargetFarm()
-	return AutoQuestFarmEnabled or FarmVampireEnabled or FarmDemonicSoulEnabled
+	return AutoQuestFarmEnabled or FarmVampireEnabled or FarmDemonicSoulEnabled or FarmDragonCrewWarriorEnabled
 end
 
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -501,7 +509,7 @@ Container2.Position = Container1.Position
 Container2.BackgroundTransparency = 1
 Container2.ScrollBarThickness = 3
 Container2.ScrollBarImageColor3 = ThemeColor
-Container2.CanvasSize = UDim2.new(0, 0, 0, 265)
+Container2.CanvasSize = UDim2.new(0, 0, 0, 305)
 Container2.Visible = false
 Container2.Parent = MainFrame
 
@@ -908,13 +916,20 @@ createToggle(Container2, "Farm Demonic Soul", 76, false, function(state)
 		CurrentTween = nil
 	end
 end)
-createToggle(Container2, "Bring Mobs Under You", 114, true, function(state)
+createToggle(Container2, "Farm Dragon Crew Warriors", 114, false, function(state)
+	FarmDragonCrewWarriorEnabled = state
+	if not hasActiveTargetFarm() and CurrentTween then
+		pcall(function() CurrentTween:Cancel() end)
+		CurrentTween = nil
+	end
+end)
+createToggle(Container2, "Bring Mobs Under You", 152, true, function(state)
 	BringMobsEnabled = state
 end)
-createToggle(Container2, "Auto Quest (Level Based)", 152, true, function(state)
+createToggle(Container2, "Auto Quest (Level Based)", 190, true, function(state)
 	AutoQuestEnabled = state
 end)
-createSlider(Container2, 190, "Farm Fly Speed", 60, 800, FlySpeed, function(val)
+createSlider(Container2, 228, "Farm Fly Speed", 60, 800, FlySpeed, function(val)
 	FlySpeed = val
 end)
 
@@ -1833,6 +1848,15 @@ task.spawn(function()
 
 				local myLvl = getPlayerLevel()
 				ensureEquippedIfNone()
+
+				if FarmDragonCrewWarriorEnabled then
+					local warriorEnemy, wRoot, wHum = getNearestByPredicate(root.Position, isDragonCrewWarriorEnemy)
+					if not farmTargetModel(char, root, warriorEnemy, wRoot, wHum, "Dragon Crew Warrior", Color3.fromRGB(249, 115, 22)) then
+						StatusLabel.Text = "●  Searching Dragon Crew Warriors..."
+						StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+					end
+					return
+				end
 
 				if FarmVampireEnabled then
 					local vampEnemy, vRoot, vHum = getNearestByPredicate(root.Position, isVampireEnemy)
