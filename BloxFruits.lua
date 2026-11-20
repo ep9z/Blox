@@ -4,6 +4,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
 local VirtualUser = game:GetService("VirtualUser")
 
 local VirtualInputManager = nil
@@ -43,6 +44,7 @@ local BringMobsEnabled = true
 local AutoQuestEnabled = true
 local ESPEnabled = true
 local ChestESPEnabled = false
+local RemoveFogEnabled = false
 local FruitESPEnabled = false
 local AutoGetFruitsEnabled = false
 local AutoStoreFruitEnabled = false
@@ -59,6 +61,8 @@ local LastHitTick = 0
 local LastPvPClickTick = 0
 local LastRollTick = 0
 local LastStoreTick = 0
+
+local SavedFogState = nil
 
 local HydraIslandFallbackPos = Vector3.new(5750, 610, -280)
 local HauntedCastleFallbackPos = Vector3.new(-9500, 145, 6080)
@@ -131,6 +135,120 @@ local TrackedNPCs = {}
 local TrackedChests = {}
 local TrackedFruits = {}
 local SeaEventKeywords = {"seabeast", "sea beast", "terror", "shark", "leviathan", "piranha", "ship", "ghost", "mirage", "kitsune"}
+
+local function captureOriginalFogState()
+	if SavedFogState then
+		return
+	end
+	pcall(function()
+		local state = {
+			FogStart = Lighting.FogStart,
+			FogEnd = Lighting.FogEnd,
+			FogColor = Lighting.FogColor,
+			Atmospheres = {},
+			Effects = {}
+		}
+		for _, obj in ipairs(Lighting:GetDescendants()) do
+			if obj:IsA("Atmosphere") then
+				state.Atmospheres[obj] = {
+					Density = obj.Density,
+					Haze = obj.Haze,
+					Glare = obj.Glare
+				}
+			elseif obj:IsA("ColorCorrectionEffect") or obj:IsA("BlurEffect") then
+				state.Effects[obj] = obj.Enabled
+			end
+		end
+		for _, obj in ipairs(Camera:GetDescendants()) do
+			if obj:IsA("Atmosphere") then
+				state.Atmospheres[obj] = {
+					Density = obj.Density,
+					Haze = obj.Haze,
+					Glare = obj.Glare
+				}
+			elseif obj:IsA("ColorCorrectionEffect") or obj:IsA("BlurEffect") then
+				state.Effects[obj] = obj.Enabled
+			end
+		end
+		SavedFogState = state
+	end)
+end
+
+local function restoreOriginalFogState()
+	if not SavedFogState then
+		return
+	end
+	pcall(function()
+		Lighting.FogStart = SavedFogState.FogStart
+		Lighting.FogEnd = SavedFogState.FogEnd
+		Lighting.FogColor = SavedFogState.FogColor
+		for obj, props in pairs(SavedFogState.Atmospheres) do
+			if obj and obj.Parent then
+				obj.Density = props.Density
+				obj.Haze = props.Haze
+				obj.Glare = props.Glare
+			end
+		end
+		for obj, wasEnabled in pairs(SavedFogState.Effects) do
+			if obj and obj.Parent then
+				obj.Enabled = wasEnabled
+			end
+		end
+	end)
+	SavedFogState = nil
+end
+
+local function clearSeaFog()
+	pcall(function()
+		captureOriginalFogState()
+		Lighting.FogStart = 100000
+		Lighting.FogEnd = 1000000
+		Lighting.FogColor = Color3.fromRGB(190, 225, 255)
+
+		for _, obj in ipairs(Lighting:GetDescendants()) do
+			if obj:IsA("Atmosphere") then
+				if SavedFogState and not SavedFogState.Atmospheres[obj] then
+					SavedFogState.Atmospheres[obj] = {
+						Density = obj.Density,
+						Haze = obj.Haze,
+						Glare = obj.Glare
+					}
+				end
+				obj.Density = 0
+				obj.Haze = 0
+				obj.Glare = 0
+			elseif obj:IsA("ColorCorrectionEffect") or obj:IsA("BlurEffect") then
+				local n = string.lower(obj.Name)
+				if string.find(n, "fog") or string.find(n, "danger") or string.find(n, "sea") or string.find(n, "dark") then
+					if SavedFogState and SavedFogState.Effects[obj] == nil then
+						SavedFogState.Effects[obj] = obj.Enabled
+					end
+					obj.Enabled = false
+				end
+			end
+		end
+
+		for _, obj in ipairs(Camera:GetDescendants()) do
+			if obj:IsA("Atmosphere") then
+				if SavedFogState and not SavedFogState.Atmospheres[obj] then
+					SavedFogState.Atmospheres[obj] = {
+						Density = obj.Density,
+						Haze = obj.Haze,
+						Glare = obj.Glare
+					}
+				end
+				obj.Density = 0
+				obj.Haze = 0
+				obj.Glare = 0
+			elseif obj:IsA("BlurEffect") or obj:IsA("ColorCorrectionEffect") then
+				if SavedFogState and SavedFogState.Effects[obj] == nil then
+					SavedFogState.Effects[obj] = obj.Enabled
+				end
+				obj.Enabled = false
+			end
+		end
+	end)
+end
 
 local function isSeaEvent(name)
 	local lower = string.lower(tostring(name))
@@ -460,6 +578,10 @@ end)
 ExitBtn.MouseButton1Click:Connect(function()
 	ScriptRunning = false
 	LockedSailDir = nil
+	if RemoveFogEnabled then
+		RemoveFogEnabled = false
+		restoreOriginalFogState()
+	end
 	pcall(function()
 		local char = LocalPlayer.Character
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -600,7 +722,7 @@ Container4.Position = Container1.Position
 Container4.BackgroundTransparency = 1
 Container4.ScrollBarThickness = 3
 Container4.ScrollBarImageColor3 = ThemeColor
-Container4.CanvasSize = UDim2.new(0, 0, 0, 120)
+Container4.CanvasSize = UDim2.new(0, 0, 0, 160)
 Container4.Visible = false
 Container4.Parent = MainFrame
 
@@ -1039,6 +1161,14 @@ end)
 
 createToggle(Container4, "ESP (Players & Sea)", 0, true, function(state) ESPEnabled = state end)
 createToggle(Container4, "ESP (Chests)", 38, false, function(state) ChestESPEnabled = state end)
+createToggle(Container4, "Remove Fog", 76, false, function(state)
+	RemoveFogEnabled = state
+	if state then
+		clearSeaFog()
+	else
+		restoreOriginalFogState()
+	end
+end)
 
 createToggle(Container5, "Auto Kill Target", 0, false, function(state)
 	PvPEnabled = state
@@ -2229,6 +2359,10 @@ RunService.Stepped:Connect(function()
 		return
 	end
 	pcall(function()
+		if RemoveFogEnabled then
+			clearSeaFog()
+		end
+
 		local char = LocalPlayer.Character
 		if not char then
 			return
