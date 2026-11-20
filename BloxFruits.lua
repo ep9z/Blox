@@ -1,7 +1,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
@@ -18,7 +17,7 @@ local Camera = Workspace.CurrentCamera
 local BgVoid = Color3.fromRGB(7, 8, 16)
 local BgPanel = Color3.fromRGB(13, 15, 28)
 local CardSurface = Color3.fromRGB(19, 22, 40)
-local CardHover = Color3.fromRGB(26, 30, 54)
+local CardHover = Color3.fromRGB(27, 32, 58)
 local AccentPrimary = Color3.fromRGB(139, 92, 246)
 local AccentCyan = Color3.fromRGB(34, 211, 238)
 local AccentSoft = Color3.fromRGB(196, 181, 253)
@@ -41,6 +40,7 @@ local AutoAttackSeaEnabled = false
 local WalkSpeedEnabled = false
 local TargetWalkSpeed = 120
 local AutoQuestFarmEnabled = false
+local AIFarmModeEnabled = true
 local StayAndWaitRespawn = true
 local FarmVampireEnabled = false
 local FarmDemonicSoulEnabled = false
@@ -58,62 +58,305 @@ local AutoStoreFruitEnabled = false
 local AutoRollFruitEnabled = false
 local PvPEnabled = false
 local AimBotEnabled = false
-local PvPSpeed = 340
+local PvPSpeed = 350
 local SelectedPvPPlayer = nil
-local FlySpeed = 300
-local BringRadius = 240
+local FlySpeed = 320
+local BringRadius = 280
+local SelectedWorldFilter = "Auto"
 local ScriptRunning = true
-local ActiveMode = "NONE"
 
 local LastHitTick = 0
 local LastPvPClickTick = 0
 local LastRollTick = 0
 local LastStoreTick = 0
 local LastQuestTick = 0
+local LastFruitPickupTick = 0
 local SavedFogState = nil
 
 local HydraIslandFallbackPos = Vector3.new(5750, 610, -280)
 local HauntedCastleFallbackPos = Vector3.new(-9500, 145, 6080)
 local SubmergedFallbackPos = Vector3.new(10850, -2100, 9400)
 
-local EnemyDatabase = {
-	{minLvl = 1, maxLvl = 14, enemy = "Bandit", questNpc = "Bandit Quest Giver", questNum = 1, island = "Starter Island", pos = Vector3.new(1060, 17, 1545)},
-	{minLvl = 15, maxLvl = 29, enemy = "Monkey", questNpc = "Monkey Quest Giver", questNum = 1, island = "Jungle", pos = Vector3.new(-1598, 36, 153)},
-	{minLvl = 30, maxLvl = 59, enemy = "Pirate", questNpc = "Pirate Quest Giver", questNum = 1, island = "Pirate Village", pos = Vector3.new(-1140, 48, 3828)},
-	{minLvl = 60, maxLvl = 89, enemy = "Brute", questNpc = "Brute Quest Giver", questNum = 1, island = "Pirate Village", pos = Vector3.new(-1145, 148, 4315)},
-	{minLvl = 90, maxLvl = 119, enemy = "Snow Bandit", questNpc = "Snow Quest Giver", questNum = 1, island = "Frozen Village", pos = Vector3.new(1390, 88, -1405)},
-	{minLvl = 120, maxLvl = 149, enemy = "Chief Petty Officer", questNpc = "Marine Quest Giver", questNum = 1, island = "Marine Fortress", pos = Vector3.new(-2850, 75, 2060)},
-	{minLvl = 150, maxLvl = 199, enemy = "Sky Bandit", questNpc = "Sky Quest Giver", questNum = 1, island = "Skylands", pos = Vector3.new(-4920, 718, -2620)},
-	{minLvl = 200, maxLvl = 249, enemy = "Prisoner", questNpc = "Prison Quest Giver", questNum = 1, island = "Prison", pos = Vector3.new(4850, 88, 740)},
-	{minLvl = 250, maxLvl = 299, enemy = "Toga Warrior", questNpc = "Colosseum Quest Giver", questNum = 1, island = "Colosseum", pos = Vector3.new(-1820, 45, -2790)},
-	{minLvl = 300, maxLvl = 374, enemy = "Military Soldier", questNpc = "Magma Quest Giver", questNum = 1, island = "Magma Village", pos = Vector3.new(-5415, 110, 5950)},
-	{minLvl = 375, maxLvl = 449, enemy = "Fishman Warrior", questNpc = "Fishman Quest Giver", questNum = 1, island = "Underwater City", pos = Vector3.new(61120, 19, 1569)},
-	{minLvl = 450, maxLvl = 624, enemy = "God's Guard", questNpc = "Sky Quest Giver 2", questNum = 1, island = "Upper Skylands", pos = Vector3.new(-4720, 845, -1940)},
-	{minLvl = 625, maxLvl = 699, enemy = "Galley Pirate", questNpc = "Fountain Quest Giver", questNum = 1, island = "Fountain City", pos = Vector3.new(5555, 165, 4000)},
-	{minLvl = 700, maxLvl = 774, enemy = "Raider", questNpc = "Area 1 Quest Giver", questNum = 1, island = "Kingdom of Rose", pos = Vector3.new(-740, 39, 2340)},
-	{minLvl = 775, maxLvl = 874, enemy = "Swan Pirate", questNpc = "Area 2 Quest Giver", questNum = 1, island = "Kingdom of Rose", pos = Vector3.new(1050, 120, 1300)},
-	{minLvl = 875, maxLvl = 999, enemy = "Marine Lieutenant", questNpc = "Marine Quest Giver 2", questNum = 1, island = "Green Zone", pos = Vector3.new(-2500, 120, -3050)},
-	{minLvl = 1000, maxLvl = 1099, enemy = "Snow Trooper", questNpc = "Snow Mountain Quest Giver", questNum = 1, island = "Snow Mountain", pos = Vector3.new(550, 420, -5300)},
-	{minLvl = 1100, maxLvl = 1249, enemy = "Lab Subordinate", questNpc = "Hot and Cold Quest Giver", questNum = 1, island = "Hot and Cold", pos = Vector3.new(-5750, 45, -5100)},
-	{minLvl = 1250, maxLvl = 1399, enemy = "Ship Deckhand", questNpc = "Ship Quest Giver", questNum = 1, island = "Cursed Ship", pos = Vector3.new(920, 125, 32800)},
-	{minLvl = 1400, maxLvl = 1499, enemy = "Arctic Warrior", questNpc = "Frost Quest Giver", questNum = 1, island = "Ice Castle", pos = Vector3.new(5660, 125, -6480)},
-	{minLvl = 1500, maxLvl = 1574, enemy = "Pirate Millionaire", questNpc = "Port Quest Giver", questNum = 1, island = "Port Town", pos = Vector3.new(-290, 44, 5580)},
-	{minLvl = 1575, maxLvl = 1699, enemy = "Dragon Crew Warrior", questNpc = "Hydra Quest Giver", questNum = 1, island = "Hydra Island", pos = Vector3.new(6300, 290, 950)},
-	{minLvl = 1700, maxLvl = 1774, enemy = "Marine Commodore", questNpc = "Tree Quest Giver", questNum = 1, island = "Great Tree", pos = Vector3.new(2280, 125, -7500)},
-	{minLvl = 1775, maxLvl = 1899, enemy = "Fishman Raider", questNpc = "Turtle Quest Giver", questNum = 1, island = "Floating Turtle", pos = Vector3.new(-10500, 330, -8750)},
-	{minLvl = 1900, maxLvl = 1974, enemy = "Forest Pirate", questNpc = "Turtle Quest Giver 2", questNum = 1, island = "Floating Turtle", pos = Vector3.new(-13250, 330, -7760)},
-	{minLvl = 1975, maxLvl = 2074, enemy = "Reborn Skeleton", questNpc = "Haunted Quest Giver", questNum = 1, island = "Haunted Castle", pos = Vector3.new(-8760, 142, 6060)},
-	{minLvl = 2075, maxLvl = 2124, enemy = "Peanut Scout", questNpc = "Nuts Quest Giver", questNum = 1, island = "Sea of Treats", pos = Vector3.new(-2100, 40, -10100)},
-	{minLvl = 2125, maxLvl = 2199, enemy = "Ice Cream Chef", questNpc = "Ice Cream Quest Giver", questNum = 1, island = "Ice Cream Island", pos = Vector3.new(-815, 66, -10960)},
-	{minLvl = 2200, maxLvl = 2299, enemy = "Cookie Crafter", questNpc = "Cake Quest Giver", questNum = 1, island = "Cake Land", pos = Vector3.new(-2020, 38, -12020)},
-	{minLvl = 2300, maxLvl = 2449, enemy = "Cocoa Warrior", questNpc = "Chocolate Quest Giver", questNum = 1, island = "Chocolate Island", pos = Vector3.new(230, 25, -12200)},
-	{minLvl = 2450, maxLvl = 2549, enemy = "Sun-kissed Warrior", questNpc = "Tiki Quest Giver 1", questNum = 1, island = "Tiki Outpost", pos = Vector3.new(-16540, 55, 1050)},
-	{minLvl = 2550, maxLvl = 2599, enemy = "Serpent Hunter", questNpc = "Tiki Quest Giver 2", questNum = 1, island = "Tiki Outpost", pos = Vector3.new(-16540, 55, 1050)},
-	{minLvl = 2600, maxLvl = 2649, enemy = "Reef Bandit", questNpc = "Submerged Quest Giver 1", questNum = 1, island = "Submerged Island", pos = SubmergedFallbackPos},
-	{minLvl = 2650, maxLvl = 2699, enemy = "Sea Chanter", questNpc = "Submerged Quest Giver 2", questNum = 1, island = "Submerged Island", pos = SubmergedFallbackPos},
-	{minLvl = 2700, maxLvl = 2724, enemy = "Ocean Prophet", questNpc = "Submerged Quest Giver 3", questNum = 1, island = "Submerged Island", pos = SubmergedFallbackPos},
-	{minLvl = 2725, maxLvl = 2749, enemy = "High Disciple", questNpc = "Submerged Quest Giver 3", questNum = 2, island = "Submerged Island", pos = SubmergedFallbackPos},
-	{minLvl = 2750, maxLvl = 3000, enemy = "Grand Devotee", questNpc = "Submerged Quest Giver 4", questNum = 1, island = "Submerged Island", pos = SubmergedFallbackPos}
+local IslandMobRegistry = {
+	{
+		world = "World 1",
+		island = "Starter Island",
+		anchor = Vector3.new(1060, 17, 1545),
+		mobs = {
+			{name = "Bandit", minLvl = 1, maxLvl = 9, questNpc = "Bandit Quest Giver", questNum = 1},
+			{name = "Trainee", minLvl = 10, maxLvl = 14, questNpc = "Bandit Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 1",
+		island = "Jungle",
+		anchor = Vector3.new(-1598, 36, 153),
+		mobs = {
+			{name = "Monkey", minLvl = 15, maxLvl = 24, questNpc = "Monkey Quest Giver", questNum = 1},
+			{name = "Gorilla", minLvl = 25, maxLvl = 29, questNpc = "Monkey Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 1",
+		island = "Pirate Village",
+		anchor = Vector3.new(-1140, 48, 3828),
+		mobs = {
+			{name = "Pirate", minLvl = 30, maxLvl = 59, questNpc = "Pirate Quest Giver", questNum = 1},
+			{name = "Brute", minLvl = 60, maxLvl = 89, questNpc = "Brute Quest Giver", questNum = 1}
+		}
+	},
+	{
+		world = "World 1",
+		island = "Frozen Village",
+		anchor = Vector3.new(1390, 88, -1405),
+		mobs = {
+			{name = "Snow Bandit", minLvl = 90, maxLvl = 104, questNpc = "Snow Quest Giver", questNum = 1},
+			{name = "Snowman", minLvl = 105, maxLvl = 119, questNpc = "Snow Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 1",
+		island = "Marine Fortress",
+		anchor = Vector3.new(-2850, 75, 2060),
+		mobs = {
+			{name = "Chief Petty Officer", minLvl = 120, maxLvl = 149, questNpc = "Marine Quest Giver", questNum = 1}
+		}
+	},
+	{
+		world = "World 1",
+		island = "Skylands",
+		anchor = Vector3.new(-4920, 718, -2620),
+		mobs = {
+			{name = "Sky Bandit", minLvl = 150, maxLvl = 174, questNpc = "Sky Quest Giver", questNum = 1},
+			{name = "Dark Master", minLvl = 175, maxLvl = 199, questNpc = "Sky Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 1",
+		island = "Prison",
+		anchor = Vector3.new(4850, 88, 740),
+		mobs = {
+			{name = "Prisoner", minLvl = 200, maxLvl = 224, questNpc = "Prison Quest Giver", questNum = 1},
+			{name = "Dangerous Prisoner", minLvl = 225, maxLvl = 249, questNpc = "Prison Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 1",
+		island = "Colosseum",
+		anchor = Vector3.new(-1820, 45, -2790),
+		mobs = {
+			{name = "Toga Warrior", minLvl = 250, maxLvl = 274, questNpc = "Colosseum Quest Giver", questNum = 1},
+			{name = "Gladiator", minLvl = 275, maxLvl = 299, questNpc = "Colosseum Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 1",
+		island = "Magma Village",
+		anchor = Vector3.new(-5415, 110, 5950),
+		mobs = {
+			{name = "Military Soldier", minLvl = 300, maxLvl = 324, questNpc = "Magma Quest Giver", questNum = 1},
+			{name = "Military Spy", minLvl = 325, maxLvl = 374, questNpc = "Magma Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 1",
+		island = "Underwater City",
+		anchor = Vector3.new(61120, 19, 1569),
+		mobs = {
+			{name = "Fishman Warrior", minLvl = 375, maxLvl = 399, questNpc = "Fishman Quest Giver", questNum = 1},
+			{name = "Fishman Commando", minLvl = 400, maxLvl = 449, questNpc = "Fishman Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 1",
+		island = "Upper Skylands",
+		anchor = Vector3.new(-4720, 845, -1940),
+		mobs = {
+			{name = "God's Guard", minLvl = 450, maxLvl = 574, questNpc = "Sky Quest Giver 2", questNum = 1},
+			{name = "Shanda", minLvl = 575, maxLvl = 624, questNpc = "Sky Quest Giver 2", questNum = 2}
+		}
+	},
+	{
+		world = "World 1",
+		island = "Fountain City",
+		anchor = Vector3.new(5555, 165, 4000),
+		mobs = {
+			{name = "Royal Squad", minLvl = 625, maxLvl = 649, questNpc = "Fountain Quest Giver", questNum = 1},
+			{name = "Royal Soldier", minLvl = 650, maxLvl = 674, questNpc = "Fountain Quest Giver", questNum = 2},
+			{name = "Galley Pirate", minLvl = 675, maxLvl = 699, questNpc = "Fountain Quest Giver", questNum = 3}
+		}
+	},
+	{
+		world = "World 2",
+		island = "Kingdom of Rose",
+		anchor = Vector3.new(-740, 39, 2340),
+		mobs = {
+			{name = "Raider", minLvl = 700, maxLvl = 724, questNpc = "Area 1 Quest Giver", questNum = 1},
+			{name = "Mercenary", minLvl = 725, maxLvl = 749, questNpc = "Area 1 Quest Giver", questNum = 2},
+			{name = "Swan Pirate", minLvl = 750, maxLvl = 824, questNpc = "Area 2 Quest Giver", questNum = 1},
+			{name = "Factory Staff", minLvl = 825, maxLvl = 874, questNpc = "Area 2 Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 2",
+		island = "Green Zone",
+		anchor = Vector3.new(-2500, 120, -3050),
+		mobs = {
+			{name = "Marine Lieutenant", minLvl = 875, maxLvl = 924, questNpc = "Marine Quest Giver 2", questNum = 1},
+			{name = "Marine Captain", minLvl = 925, maxLvl = 999, questNpc = "Marine Quest Giver 2", questNum = 2}
+		}
+	},
+	{
+		world = "World 2",
+		island = "Snow Mountain",
+		anchor = Vector3.new(550, 420, -5300),
+		mobs = {
+			{name = "Snow Trooper", minLvl = 1000, maxLvl = 1049, questNpc = "Snow Mountain Quest Giver", questNum = 1},
+			{name = "Winter Warrior", minLvl = 1050, maxLvl = 1099, questNpc = "Snow Mountain Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 2",
+		island = "Hot and Cold",
+		anchor = Vector3.new(-5750, 45, -5100),
+		mobs = {
+			{name = "Lab Subordinate", minLvl = 1100, maxLvl = 1174, questNpc = "Hot and Cold Quest Giver", questNum = 1},
+			{name = "Horned Warrior", minLvl = 1175, maxLvl = 1249, questNpc = "Hot and Cold Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 2",
+		island = "Cursed Ship",
+		anchor = Vector3.new(920, 125, 32800),
+		mobs = {
+			{name = "Ship Deckhand", minLvl = 1250, maxLvl = 1324, questNpc = "Ship Quest Giver", questNum = 1},
+			{name = "Ship Engineer", minLvl = 1325, maxLvl = 1399, questNpc = "Ship Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 2",
+		island = "Ice Castle",
+		anchor = Vector3.new(5660, 125, -6480),
+		mobs = {
+			{name = "Arctic Warrior", minLvl = 1400, maxLvl = 1449, questNpc = "Frost Quest Giver", questNum = 1},
+			{name = "Snow Lurker", minLvl = 1450, maxLvl = 1499, questNpc = "Frost Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 3",
+		island = "Port Town",
+		anchor = Vector3.new(-290, 44, 5580),
+		mobs = {
+			{name = "Pirate Millionaire", minLvl = 1500, maxLvl = 1524, questNpc = "Port Quest Giver", questNum = 1},
+			{name = "Pistol Billionaire", minLvl = 1525, maxLvl = 1574, questNpc = "Port Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 3",
+		island = "Hydra Island",
+		anchor = Vector3.new(6300, 290, 950),
+		mobs = {
+			{name = "Dragon Crew Warrior", minLvl = 1575, maxLvl = 1624, questNpc = "Hydra Quest Giver", questNum = 1},
+			{name = "Dragon Crew Archer", minLvl = 1625, maxLvl = 1699, questNpc = "Hydra Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 3",
+		island = "Great Tree",
+		anchor = Vector3.new(2280, 125, -7500),
+		mobs = {
+			{name = "Marine Commodore", minLvl = 1700, maxLvl = 1724, questNpc = "Tree Quest Giver", questNum = 1},
+			{name = "Marine Rear Admiral", minLvl = 1725, maxLvl = 1774, questNpc = "Tree Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 3",
+		island = "Floating Turtle",
+		anchor = Vector3.new(-10500, 330, -8750),
+		mobs = {
+			{name = "Fishman Raider", minLvl = 1775, maxLvl = 1799, questNpc = "Turtle Quest Giver", questNum = 1},
+			{name = "Fishman Captain", minLvl = 1800, maxLvl = 1899, questNpc = "Turtle Quest Giver", questNum = 2},
+			{name = "Forest Pirate", minLvl = 1900, maxLvl = 1924, questNpc = "Turtle Quest Giver 2", questNum = 1},
+			{name = "Mythological Pirate", minLvl = 1925, maxLvl = 1974, questNpc = "Turtle Quest Giver 2", questNum = 2}
+		}
+	},
+	{
+		world = "World 3",
+		island = "Haunted Castle",
+		anchor = Vector3.new(-8760, 142, 6060),
+		mobs = {
+			{name = "Reborn Skeleton", minLvl = 1975, maxLvl = 1999, questNpc = "Haunted Quest Giver", questNum = 1},
+			{name = "Living Zombie", minLvl = 2000, maxLvl = 2024, questNpc = "Haunted Quest Giver", questNum = 2},
+			{name = "Demonic Soul", minLvl = 2025, maxLvl = 2049, questNpc = "Haunted Quest Giver", questNum = 3},
+			{name = "Posessed Mummy", minLvl = 2050, maxLvl = 2074, questNpc = "Haunted Quest Giver", questNum = 4}
+		}
+	},
+	{
+		world = "World 3",
+		island = "Sea of Treats",
+		anchor = Vector3.new(-2100, 40, -10100),
+		mobs = {
+			{name = "Peanut Scout", minLvl = 2075, maxLvl = 2099, questNpc = "Nuts Quest Giver", questNum = 1},
+			{name = "Peanut President", minLvl = 2100, maxLvl = 2124, questNpc = "Nuts Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 3",
+		island = "Ice Cream Island",
+		anchor = Vector3.new(-815, 66, -10960),
+		mobs = {
+			{name = "Ice Cream Chef", minLvl = 2125, maxLvl = 2149, questNpc = "Ice Cream Quest Giver", questNum = 1},
+			{name = "Ice Cream Commander", minLvl = 2150, maxLvl = 2199, questNpc = "Ice Cream Quest Giver", questNum = 2}
+		}
+	},
+	{
+		world = "World 3",
+		island = "Cake Land",
+		anchor = Vector3.new(-2020, 38, -12020),
+		mobs = {
+			{name = "Cookie Crafter", minLvl = 2200, maxLvl = 2249, questNpc = "Cake Quest Giver", questNum = 1},
+			{name = "Cake Guard", minLvl = 2250, maxLvl = 2274, questNpc = "Cake Quest Giver", questNum = 2},
+			{name = "Baking Staff", minLvl = 2275, maxLvl = 2299, questNpc = "Cake Quest Giver", questNum = 3}
+		}
+	},
+	{
+		world = "World 3",
+		island = "Chocolate Island",
+		anchor = Vector3.new(230, 25, -12200),
+		mobs = {
+			{name = "Cocoa Warrior", minLvl = 2300, maxLvl = 2324, questNpc = "Chocolate Quest Giver", questNum = 1},
+			{name = "Chocolate Bar Battler", minLvl = 2325, maxLvl = 2349, questNpc = "Chocolate Quest Giver", questNum = 2},
+			{name = "Sweet Thief", minLvl = 2350, maxLvl = 2399, questNpc = "Chocolate Quest Giver", questNum = 3},
+			{name = "Candy Rebel", minLvl = 2400, maxLvl = 2449, questNpc = "Chocolate Quest Giver", questNum = 4}
+		}
+	},
+	{
+		world = "World 3",
+		island = "Tiki Outpost",
+		anchor = Vector3.new(-16540, 55, 1050),
+		mobs = {
+			{name = "Isle Outlaw", minLvl = 2450, maxLvl = 2474, questNpc = "Tiki Quest Giver 1", questNum = 1},
+			{name = "Island Boy", minLvl = 2475, maxLvl = 2499, questNpc = "Tiki Quest Giver 1", questNum = 2},
+			{name = "Sun-kissed Warrior", minLvl = 2500, maxLvl = 2524, questNpc = "Tiki Quest Giver 1", questNum = 3},
+			{name = "Isle Champion", minLvl = 2525, maxLvl = 2549, questNpc = "Tiki Quest Giver 1", questNum = 4},
+			{name = "Serpent Hunter", minLvl = 2550, maxLvl = 2574, questNpc = "Tiki Quest Giver 2", questNum = 1},
+			{name = "Skull Slayer", minLvl = 2575, maxLvl = 2599, questNpc = "Tiki Quest Giver 2", questNum = 2}
+		}
+	},
+	{
+		world = "World 3",
+		island = "Submerged Island",
+		anchor = SubmergedFallbackPos,
+		mobs = {
+			{name = "Reef Bandit", minLvl = 2600, maxLvl = 2624, questNpc = "Submerged Quest Giver 1", questNum = 1},
+			{name = "Coral Pirate", minLvl = 2625, maxLvl = 2649, questNpc = "Submerged Quest Giver 1", questNum = 2},
+			{name = "Tide Guard", minLvl = 2650, maxLvl = 2674, questNpc = "Submerged Quest Giver 2", questNum = 1},
+			{name = "Sea Chanter", minLvl = 2675, maxLvl = 2699, questNpc = "Submerged Quest Giver 2", questNum = 2},
+			{name = "Ocean Prophet", minLvl = 2700, maxLvl = 2724, questNpc = "Submerged Quest Giver 3", questNum = 1},
+			{name = "High Disciple", minLvl = 2725, maxLvl = 2749, questNpc = "Submerged Quest Giver 3", questNum = 2},
+			{name = "Grand Devotee", minLvl = 2750, maxLvl = 3000, questNpc = "Submerged Quest Giver 4", questNum = 1}
+		}
+	}
 }
 
 local AllowedChestNames = {
@@ -151,6 +394,39 @@ local TrackedChests = {}
 local TrackedFruits = {}
 local SeaEventKeywords = {"seabeast", "sea beast", "terror", "shark", "leviathan", "piranha", "ship", "ghost", "mirage", "kitsune"}
 
+local function detectCurrentWorld(myPos)
+	if SelectedWorldFilter == "World 1" or SelectedWorldFilter == "World 2" or SelectedWorldFilter == "World 3" then
+		return SelectedWorldFilter
+	end
+	local ok, worldName = pcall(function()
+		local map = Workspace:FindFirstChild("Map")
+		if map then
+			if map:FindFirstChild("SubmergedIsland") or map:FindFirstChild("Submerged Island") or map:FindFirstChild("TikiOutpost") or map:FindFirstChild("Tiki Outpost") or map:FindFirstChild("HauntedCastle") or map:FindFirstChild("Haunted Castle") then
+				return "World 3"
+			end
+			if map:FindFirstChild("Dressrosa") or map:FindFirstChild("GreenZone") or map:FindFirstChild("HotAndCold") or map:FindFirstChild("IceCastle") then
+				return "World 2"
+			end
+		end
+		if myPos and myPos.Y < -1200 then
+			return "World 3"
+		end
+		local lvl = 1
+		local data = LocalPlayer:FindFirstChild("Data")
+		local lvObj = data and data:FindFirstChild("Level")
+		if lvObj and typeof(lvObj.Value) == "number" then
+			lvl = lvObj.Value
+		end
+		if lvl >= 1500 then
+			return "World 3"
+		elseif lvl >= 700 then
+			return "World 2"
+		end
+		return "World 1"
+	end)
+	return (ok and worldName) or "World 1"
+end
+
 local function captureOriginalFogState()
 	if SavedFogState then
 		return
@@ -164,13 +440,6 @@ local function captureOriginalFogState()
 			Effects = {}
 		}
 		for _, obj in ipairs(Lighting:GetDescendants()) do
-			if obj:IsA("Atmosphere") then
-				state.Atmospheres[obj] = {Density = obj.Density, Haze = obj.Haze, Glare = obj.Glare}
-			elseif obj:IsA("ColorCorrectionEffect") or obj:IsA("BlurEffect") then
-				state.Effects[obj] = obj.Enabled
-			end
-		end
-		for _, obj in ipairs(Camera:GetDescendants()) do
 			if obj:IsA("Atmosphere") then
 				state.Atmospheres[obj] = {Density = obj.Density, Haze = obj.Haze, Glare = obj.Glare}
 			elseif obj:IsA("ColorCorrectionEffect") or obj:IsA("BlurEffect") then
@@ -243,17 +512,11 @@ local function isSeaEvent(name)
 end
 
 local function isVampireEnemy(model)
-	if not model or not model.Name then
-		return false
-	end
-	return string.find(string.lower(tostring(model.Name)), "vampire") ~= nil
+	return model and model.Name and string.find(string.lower(tostring(model.Name)), "vampire", 1, true) ~= nil
 end
 
 local function isDemonicSoulEnemy(model)
-	if not model or not model.Name then
-		return false
-	end
-	return string.find(string.lower(tostring(model.Name)), "demonic soul") ~= nil
+	return model and model.Name and string.find(string.lower(tostring(model.Name)), "demonic soul", 1, true) ~= nil
 end
 
 local function isDragonScaleEnemy(model)
@@ -261,7 +524,7 @@ local function isDragonScaleEnemy(model)
 		return false
 	end
 	local lower = string.lower(tostring(model.Name))
-	return string.find(lower, "dragon crew warrior") ~= nil or string.find(lower, "dragon crew archer") ~= nil
+	return string.find(lower, "dragon crew warrior", 1, true) ~= nil or string.find(lower, "dragon crew archer", 1, true) ~= nil
 end
 
 local function isBoneEnemy(model)
@@ -269,7 +532,11 @@ local function isBoneEnemy(model)
 		return false
 	end
 	local lower = string.lower(tostring(model.Name))
-	return string.find(lower, "reborn skeleton") ~= nil or string.find(lower, "living zombie") ~= nil or string.find(lower, "demonic soul") ~= nil or string.find(lower, "posessed mummy") ~= nil or string.find(lower, "possessed mummy") ~= nil
+	return string.find(lower, "reborn skeleton", 1, true) ~= nil
+		or string.find(lower, "living zombie", 1, true) ~= nil
+		or string.find(lower, "demonic soul", 1, true) ~= nil
+		or string.find(lower, "posessed mummy", 1, true) ~= nil
+		or string.find(lower, "possessed mummy", 1, true) ~= nil
 end
 
 local function getPlayerLevel()
@@ -289,22 +556,94 @@ local function getPlayerLevel()
 	return ok and lvl or 1
 end
 
-local function getLevelBracketEntry(lvl)
-	local chosen = EnemyDatabase[1]
-	for _, entry in ipairs(EnemyDatabase) do
-		if lvl >= entry.minLvl and lvl <= entry.maxLvl then
-			chosen = entry
-			break
-		elseif lvl >= entry.minLvl then
-			chosen = entry
+local function getActualMobLevel(enemyModel)
+	local ok, lvl = pcall(function()
+		if not enemyModel then
+			return nil
 		end
-	end
-	return chosen
+		for _, attr in ipairs({"Level", "Lvl", "level", "lvl"}) do
+			local v = enemyModel:GetAttribute(attr)
+			if typeof(v) == "number" then
+				return v
+			end
+		end
+		for _, ch in ipairs({"Level", "Lvl", "level", "lvl"}) do
+			local obj = enemyModel:FindFirstChild(ch)
+			if obj and (obj:IsA("IntValue") or obj:IsA("NumberValue")) then
+				return obj.Value
+			end
+		end
+		local m = string.match(tostring(enemyModel.Name), "%[%s*[Ll][Vv]?%.?%s*(%d+)%s*%]")
+			or string.match(tostring(enemyModel.Name), "[Ll][Vv]?%.?%s*(%d+)")
+		if m then
+			return tonumber(m)
+		end
+		for _, desc in ipairs(enemyModel:GetDescendants()) do
+			if desc:IsA("TextLabel") then
+				local tm = string.match(tostring(desc.Text), "[Ll][Vv]?%.?%s*(%d+)")
+				if tm then
+					return tonumber(tm)
+				end
+			end
+		end
+		return nil
+	end)
+	return ok and lvl or nil
 end
 
-local function findSpawnAnchorForEnemy(enemyName, fallbackPos)
+local function getIslandAndMobForLevel(lvl, myPos)
+	local worldTag = detectCurrentWorld(myPos)
+	local candidates = {}
+	for _, isl in ipairs(IslandMobRegistry) do
+		if isl.world == worldTag then
+			table.insert(candidates, isl)
+		end
+	end
+	if #candidates == 0 then
+		candidates = IslandMobRegistry
+	end
+
+	local bestIsland = candidates[1]
+	local bestDist = math.huge
+	if myPos then
+		for _, isl in ipairs(candidates) do
+			local d = (myPos - isl.anchor).Magnitude
+			if d < bestDist then
+				bestDist = d
+				bestIsland = isl
+			end
+		end
+	end
+
+	local exactMatch = nil
+	local belowOrEqualMatch = nil
+
+	for _, isl in ipairs(candidates) do
+		for _, mob in ipairs(isl.mobs) do
+			if lvl >= mob.minLvl and lvl <= mob.maxLvl then
+				exactMatch = {world = isl.world, island = isl.island, anchor = isl.anchor, mob = mob}
+			elseif lvl >= mob.minLvl then
+				if not belowOrEqualMatch
+					or mob.maxLvl > belowOrEqualMatch.mob.maxLvl
+					or (mob.maxLvl == belowOrEqualMatch.mob.maxLvl and myPos and ((myPos - isl.anchor).Magnitude < (myPos - belowOrEqualMatch.anchor).Magnitude)) then
+					belowOrEqualMatch = {world = isl.world, island = isl.island, anchor = isl.anchor, mob = mob}
+				end
+			end
+		end
+	end
+
+	if exactMatch then
+		return exactMatch
+	end
+	if belowOrEqualMatch then
+		return belowOrEqualMatch
+	end
+	return {world = bestIsland.world, island = bestIsland.island, anchor = bestIsland.anchor, mob = bestIsland.mobs[1]}
+end
+
+local function findSpawnAnchorForMob(mobName, fallbackPos)
 	local ok, pos = pcall(function()
-		local lowerTarget = string.lower(tostring(enemyName))
+		local lowerTarget = string.lower(tostring(mobName))
 		local spawns = Workspace:FindFirstChild("_WorldOrigin") and Workspace._WorldOrigin:FindFirstChild("EnemySpawns")
 		if spawns then
 			for _, sp in ipairs(spawns:GetChildren()) do
@@ -344,7 +683,7 @@ local function getHydraDragonScalePosition()
 				end
 			end
 		end
-		return findSpawnAnchorForEnemy("Dragon Crew", HydraIslandFallbackPos)
+		return findSpawnAnchorForMob("Dragon Crew", HydraIslandFallbackPos)
 	end)
 	return (ok and pos) or HydraIslandFallbackPos
 end
@@ -361,7 +700,7 @@ local function getHauntedCastleBonesPosition()
 				end
 			end
 		end
-		return findSpawnAnchorForEnemy("Reborn Skeleton", HauntedCastleFallbackPos)
+		return findSpawnAnchorForMob("Reborn Skeleton", HauntedCastleFallbackPos)
 	end)
 	return (ok and pos) or HauntedCastleFallbackPos
 end
@@ -447,44 +786,36 @@ local function hasActiveTargetFarm()
 	return AutoQuestFarmEnabled or FarmVampireEnabled or FarmDemonicSoulEnabled or FarmDragonScaleEnabled or FarmBonesEnabled
 end
 
-local function moveToPositionSmooth(root, targetPos, speed, maxTime)
+local function stepTowardPosition(root, goalCFrame, speed, dt)
 	if not root or not root.Parent then
 		return
 	end
-	local dist = (root.Position - targetPos).Magnitude
-	if dist <= 6 then
-		root.CFrame = CFrame.new(targetPos)
-		root.AssemblyLinearVelocity = Vector3.zero
-		root.AssemblyAngularVelocity = Vector3.zero
-		return
+	local currentPos = root.Position
+	local targetPos = goalCFrame.Position
+	local delta = targetPos - currentPos
+	local dist = delta.Magnitude
+	local maxStep = math.max(speed, 60) * math.max(dt, 0.016)
+	if dist <= math.max(maxStep, 3.5) then
+		root.CFrame = goalCFrame
+	else
+		local nextPos = currentPos + (delta.Unit * maxStep)
+		root.CFrame = CFrame.lookAt(nextPos, targetPos)
 	end
-	local dur = math.clamp(dist / math.max(speed, 60), 0.04, maxTime or 8)
-	local tw = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPos)})
-	tw:Play()
-	local t0 = tick()
-	while ScriptRunning and (tick() - t0) < dur do
-		if not root.Parent then
-			pcall(function() tw:Cancel() end)
-			return
-		end
-		root.AssemblyLinearVelocity = Vector3.zero
-		root.AssemblyAngularVelocity = Vector3.zero
-		task.wait(0.03)
-	end
-	pcall(function() tw:Cancel() end)
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
 end
 
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 pcall(function()
 	for _, gui in ipairs(playerGui:GetChildren()) do
-		if gui.Name == "NexoaroHubV3" or gui.Name == "NexoaroController" then
+		if gui.Name == "NexoaroHubV5" or gui.Name == "NexoaroHubV4" or gui.Name == "NexoaroHubV3" or gui.Name == "NexoaroController" then
 			gui:Destroy()
 		end
 	end
 end)
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "NexoaroHubV3"
+ScreenGui.Name = "NexoaroHubV5"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 999
@@ -504,15 +835,15 @@ local function applyDeviceLayout()
 	local vp = Camera.ViewportSize
 	isMobile = (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) or vp.X < 750
 	if isMobile then
-		MainFrame.Size = UDim2.new(0, 326, 0, 385)
+		MainFrame.Size = UDim2.new(0, 326, 0, 395)
 		UIScale.Scale = math.clamp(vp.Y / 480, 0.72, 0.96)
 	else
-		MainFrame.Size = UDim2.new(0, 445, 0, 460)
+		MainFrame.Size = UDim2.new(0, 450, 0, 470)
 		UIScale.Scale = math.clamp(vp.Y / 900, 0.88, 1.15)
 	end
 end
 
-MainFrame.Position = isMobile and UDim2.new(0.03, 0, 0.10, 0) or UDim2.new(0.02, 0, 0.20, 0)
+MainFrame.Position = isMobile and UDim2.new(0.03, 0, 0.09, 0) or UDim2.new(0.02, 0, 0.19, 0)
 applyDeviceLayout()
 Camera:GetPropertyChangedSignal("ViewportSize"):Connect(applyDeviceLayout)
 
@@ -579,7 +910,7 @@ Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = TopBar
 
 local SubPill = Instance.new("Frame")
-SubPill.Size = UDim2.new(0, 92, 0, 18)
+SubPill.Size = UDim2.new(0, 96, 0, 18)
 SubPill.Position = UDim2.new(0, isMobile and 112 or 126, 0.5, -9)
 SubPill.BackgroundColor3 = Color3.fromRGB(26, 31, 56)
 SubPill.BorderSizePixel = 0
@@ -593,7 +924,7 @@ subStroke.Transparency = 0.45
 local SubTitle = Instance.new("TextLabel")
 SubTitle.Size = UDim2.new(1, 0, 1, 0)
 SubTitle.BackgroundTransparency = 1
-SubTitle.Text = "PRO V3 • HUB"
+SubTitle.Text = "AI WORLDS • V5"
 SubTitle.TextColor3 = AccentCyan
 SubTitle.Font = Enum.Font.GothamBold
 SubTitle.TextSize = 8.5
@@ -622,10 +953,10 @@ MinBtn.Parent = TopBar
 Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 7)
 
 local OpenPill = Instance.new("TextButton")
-OpenPill.Size = UDim2.new(0, 128, 0, 34)
+OpenPill.Size = UDim2.new(0, 134, 0, 34)
 OpenPill.Position = UDim2.new(0.02, 0, 0.1, 0)
 OpenPill.BackgroundColor3 = BgPanel
-OpenPill.Text = "⚡ NEXOARO V3"
+OpenPill.Text = "⚡ NEXOARO AI V5"
 OpenPill.TextColor3 = AccentCyan
 OpenPill.Font = Enum.Font.GothamBold
 OpenPill.TextSize = 11
@@ -694,7 +1025,7 @@ local StatusLabel = Instance.new("TextLabel")
 StatusLabel.Size = UDim2.new(1, -16, 1, 0)
 StatusLabel.Position = UDim2.new(0, 8, 0, 0)
 StatusLabel.BackgroundTransparency = 1
-StatusLabel.Text = "●  Status: Ready • Lv." .. tostring(getPlayerLevel())
+StatusLabel.Text = "●  AI Ready • Lv." .. tostring(getPlayerLevel())
 StatusLabel.TextColor3 = AccentCyan
 StatusLabel.Font = Enum.Font.GothamSemibold
 StatusLabel.TextSize = 10
@@ -756,7 +1087,7 @@ Container2.Position = Container1.Position
 Container2.BackgroundTransparency = 1
 Container2.ScrollBarThickness = 3
 Container2.ScrollBarImageColor3 = AccentCyan
-Container2.CanvasSize = UDim2.new(0, 0, 0, 420)
+Container2.CanvasSize = UDim2.new(0, 0, 0, 510)
 Container2.Visible = false
 Container2.Parent = MainFrame
 
@@ -1046,17 +1377,14 @@ local function applyLockedSailVelocity(seat, speed, dir)
 		else
 			flatDir = flatDir.Unit
 		end
-
 		local boatModel = seat:FindFirstAncestorOfClass("Model")
 		local primary = (boatModel and (boatModel.PrimaryPart or seat)) or seat
 		local targetVel = flatDir * speed
-
 		for _, part in ipairs(getBoatParts(seat)) do
 			if not part.Anchored then
 				part.AssemblyLinearVelocity = Vector3.new(targetVel.X, part.AssemblyLinearVelocity.Y, targetVel.Z)
 			end
 		end
-
 		local bv = primary:FindFirstChild("NexoaroBoatVel")
 		if not bv or not bv:IsA("BodyVelocity") then
 			if bv then
@@ -1069,7 +1397,6 @@ local function applyLockedSailVelocity(seat, speed, dir)
 			bv.Parent = primary
 		end
 		bv.Velocity = targetVel
-
 		if seat:IsA("VehicleSeat") then
 			seat.MaxSpeed = math.max(speed, 180)
 			seat.Throttle = 1
@@ -1117,15 +1444,50 @@ createToggle(Container1, "Boat Speed Boost", 114, false, function(state)
 end)
 createSlider(Container1, 152, "Boat Speed", 16, 1000, TargetBoatSpeed, function(val) TargetBoatSpeed = val end)
 
-createToggle(Container2, "Auto Farm (Level + Wait Respawn)", 0, false, function(state) AutoQuestFarmEnabled = state end)
-createToggle(Container2, "Stay & Wait Respawn (No Island Hop)", 38, true, function(state) StayAndWaitRespawn = state end)
-createToggle(Container2, "Farm Vampire (Fangs)", 76, false, function(state) FarmVampireEnabled = state end)
-createToggle(Container2, "Farm Demonic Soul", 114, false, function(state) FarmDemonicSoulEnabled = state end)
-createToggle(Container2, "Auto Farm Dragon Scale", 152, false, function(state) FarmDragonScaleEnabled = state end)
-createToggle(Container2, "Auto Farm Bones", 190, false, function(state) FarmBonesEnabled = state end)
-createToggle(Container2, "Bring Mobs Under You", 228, true, function(state) BringMobsEnabled = state end)
-createToggle(Container2, "Auto Quest (Level Bracket)", 266, true, function(state) AutoQuestEnabled = state end)
-createSlider(Container2, 304, "Farm Fly Speed", 60, 800, FlySpeed, function(val) FlySpeed = val end)
+local WorldSelectorCard = Instance.new("Frame")
+WorldSelectorCard.Size = UDim2.new(1, -6, 0, 34)
+WorldSelectorCard.Position = UDim2.new(0, 2, 0, 0)
+WorldSelectorCard.BackgroundColor3 = CardSurface
+WorldSelectorCard.BorderSizePixel = 0
+WorldSelectorCard.Parent = Container2
+Instance.new("UICorner", WorldSelectorCard).CornerRadius = UDim.new(0, 8)
+local worldStroke = Instance.new("UIStroke", WorldSelectorCard)
+worldStroke.Color = Color3.fromRGB(40, 47, 78)
+worldStroke.Thickness = 1
+
+local WorldBtn = Instance.new("TextButton")
+WorldBtn.Size = UDim2.new(1, -12, 1, -8)
+WorldBtn.Position = UDim2.new(0, 6, 0, 4)
+WorldBtn.BackgroundColor3 = CardHover
+WorldBtn.Text = "World Mode: Auto Detect (W1 / W2 / W3)"
+WorldBtn.TextColor3 = AccentCyan
+WorldBtn.Font = Enum.Font.GothamBold
+WorldBtn.TextSize = 10
+WorldBtn.Parent = WorldSelectorCard
+Instance.new("UICorner", WorldBtn).CornerRadius = UDim.new(0, 6)
+
+local WorldCycleOrder = {"Auto", "World 1", "World 2", "World 3"}
+local WorldCycleIndex = 1
+WorldBtn.MouseButton1Click:Connect(function()
+	WorldCycleIndex = (WorldCycleIndex % #WorldCycleOrder) + 1
+	SelectedWorldFilter = WorldCycleOrder[WorldCycleIndex]
+	if SelectedWorldFilter == "Auto" then
+		WorldBtn.Text = "World Mode: Auto Detect (W1 / W2 / W3)"
+	else
+		WorldBtn.Text = "World Mode: " .. SelectedWorldFilter
+	end
+end)
+
+createToggle(Container2, "Auto Farm (AI Smart Target)", 38, false, function(state) AutoQuestFarmEnabled = state end)
+createToggle(Container2, "AI Target & Cluster Scoring", 76, true, function(state) AIFarmModeEnabled = state end)
+createToggle(Container2, "Stay & Wait Respawn (No Island Hop)", 114, true, function(state) StayAndWaitRespawn = state end)
+createToggle(Container2, "Farm Vampire (Fangs)", 152, false, function(state) FarmVampireEnabled = state end)
+createToggle(Container2, "Farm Demonic Soul", 190, false, function(state) FarmDemonicSoulEnabled = state end)
+createToggle(Container2, "Auto Farm Dragon Scale", 228, false, function(state) FarmDragonScaleEnabled = state end)
+createToggle(Container2, "Auto Farm Bones", 266, false, function(state) FarmBonesEnabled = state end)
+createToggle(Container2, "Bring Mobs Under You", 304, true, function(state) BringMobsEnabled = state end)
+createToggle(Container2, "Auto Quest (Level Bracket)", 342, true, function(state) AutoQuestEnabled = state end)
+createSlider(Container2, 380, "Farm Fly Speed", 60, 800, FlySpeed, function(val) FlySpeed = val end)
 
 createToggle(Container3, "Walk Speed Boost", 0, false, function(state)
 	WalkSpeedEnabled = state
@@ -1356,9 +1718,9 @@ local function hasActiveQuest()
 			return true
 		end
 		for _, gui in ipairs(playerGui:GetDescendants()) do
-			if gui:IsA("Frame") and string.find(string.lower(gui.Name), "quest") and gui.Visible then
+			if gui:IsA("Frame") and string.find(string.lower(gui.Name), "quest", 1, true) and gui.Visible then
 				local titleLbl = gui:FindFirstChildWhichIsA("TextLabel", true)
-				if titleLbl and titleLbl.Text ~= "" and not string.find(string.lower(titleLbl.Text), "select") then
+				if titleLbl and titleLbl.Text ~= "" and not string.find(string.lower(titleLbl.Text), "select", 1, true) then
 					return true
 				end
 			end
@@ -1376,7 +1738,8 @@ local function ensureEquippedIfNone()
 		if not char or not hum or not backpack then
 			return
 		end
-		if char:FindFirstChildOfClass("Tool") then
+		local equipped = char:FindFirstChildOfClass("Tool")
+		if equipped then
 			return
 		end
 		local firstTool = backpack:FindFirstChildOfClass("Tool")
@@ -1386,8 +1749,8 @@ local function ensureEquippedIfNone()
 	end)
 end
 
-local function tryTakeQuestForBracket(root, bracketEntry)
-	if not bracketEntry then
+local function tryTakeQuestForMob(mobInfo)
+	if not mobInfo then
 		return
 	end
 	local now = tick()
@@ -1396,33 +1759,29 @@ local function tryTakeQuestForBracket(root, bracketEntry)
 	end
 	LastQuestTick = now
 	pcall(function()
-		local questNpcName = string.lower(tostring(bracketEntry.questNpc or ""))
-		local questNum = bracketEntry.questNum or 1
+		local questNpc = mobInfo.questNpc
+		local questNum = mobInfo.questNum or 1
 		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
 			if rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent") then
 				local n = string.lower(rem.Name)
-				if string.find(n, "commf") or string.find(n, "quest") then
+				if string.find(n, "commf", 1, true) or string.find(n, "quest", 1, true) then
 					if rem:IsA("RemoteFunction") then
-						pcall(function() rem:InvokeServer("StartQuest", bracketEntry.questNpc, questNum) end)
+						pcall(function() rem:InvokeServer("StartQuest", questNpc, questNum) end)
 					elseif rem:IsA("RemoteEvent") then
-						pcall(function() rem:FireServer("StartQuest", bracketEntry.questNpc, questNum) end)
+						pcall(function() rem:FireServer("StartQuest", questNpc, questNum) end)
 					end
 				end
 			end
 		end
-		for _, obj in ipairs(Workspace:GetDescendants()) do
-			if obj:IsA("Model") and string.find(string.lower(obj.Name), questNpcName, 1, true) then
-				local part = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
-				if part and (root.Position - part.Position).Magnitude < 450 then
-					moveToPositionSmooth(root, part.Position + Vector3.new(0, 2, -4), FlySpeed, 4)
-					for _, desc in ipairs(obj:GetDescendants()) do
-						if desc:IsA("ProximityPrompt") then
-							pcall(function() fireproximityprompt(desc) end)
-						elseif desc:IsA("ClickDetector") and fireclickdetector then
-							pcall(function() fireclickdetector(desc) end)
+		for _, gui in ipairs(playerGui:GetDescendants()) do
+			if gui:IsA("TextButton") and gui.Visible then
+				local t = string.lower(gui.Text)
+				if string.find(t, "accept", 1, true) or string.find(t, "confirm", 1, true) then
+					if getconnections then
+						for _, conn in ipairs(getconnections(gui.MouseButton1Click)) do
+							pcall(function() conn:Fire() end)
 						end
 					end
-					break
 				end
 			end
 		end
@@ -1446,7 +1805,7 @@ local function storeFruitsInInventory()
 						for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
 							if rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent") then
 								local n = string.lower(rem.Name)
-								if string.find(n, "commf") or string.find(n, "store") or string.find(n, "fruit") or string.find(n, "inventory") then
+								if string.find(n, "commf", 1, true) or string.find(n, "store", 1, true) or string.find(n, "fruit", 1, true) or string.find(n, "inventory", 1, true) then
 									if rem:IsA("RemoteFunction") then
 										pcall(function() rem:InvokeServer("StoreFruit", fruitKey, item) end)
 										pcall(function() rem:InvokeServer("StoreFruit", resolvedFruit, item) end)
@@ -1474,7 +1833,7 @@ local function tryAutoRollFruit()
 		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
 			if rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent") then
 				local n = string.lower(rem.Name)
-				if string.find(n, "roll") or string.find(n, "gacha") or string.find(n, "spin") or string.find(n, "fruit") then
+				if string.find(n, "roll", 1, true) or string.find(n, "gacha", 1, true) or string.find(n, "spin", 1, true) or string.find(n, "fruit", 1, true) then
 					if rem:IsA("RemoteFunction") then
 						pcall(function() rem:InvokeServer("Censor") end)
 						pcall(function() rem:InvokeServer("RollFruit") end)
@@ -1574,6 +1933,7 @@ local function triggerAutoClickerHit(char)
 	end
 	LastPvPClickTick = now
 	pcall(function()
+		ensureEquippedIfNone()
 		local tool = char and char:FindFirstChildOfClass("Tool")
 		if tool then
 			tool:Activate()
@@ -1597,11 +1957,12 @@ local function triggerHit(char)
 		return
 	end
 	local now = tick()
-	if (now - LastHitTick) < 0.075 then
+	if (now - LastHitTick) < 0.065 then
 		return
 	end
 	LastHitTick = now
 	pcall(function()
+		ensureEquippedIfNone()
 		local tool = char and char:FindFirstChildOfClass("Tool")
 		if tool then
 			tool:Activate()
@@ -1611,30 +1972,114 @@ local function triggerHit(char)
 		if VirtualInputManager then
 			VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
 			VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
-		else
-			VirtualUser:CaptureController()
-			VirtualUser:ClickButton1(Vector2.new(x, y))
+		end
+		VirtualUser:CaptureController()
+		VirtualUser:ClickButton1(Vector2.new(x, y))
+		if mouse1click then
+			mouse1click()
 		end
 	end)
+end
+
+local function matchesMobEntry(enemyModel, mobEntry)
+	if not enemyModel or not mobEntry then
+		return false
+	end
+	local lowerName = string.lower(tostring(enemyModel.Name))
+	local lowerTarget = string.lower(tostring(mobEntry.name))
+	if string.find(lowerName, lowerTarget, 1, true) then
+		return true
+	end
+	local actualLvl = getActualMobLevel(enemyModel)
+	if actualLvl and actualLvl >= mobEntry.minLvl and actualLvl <= mobEntry.maxLvl then
+		return true
+	end
+	return false
+end
+
+local function countNearbyCluster(centerPos, enemiesList, filterPredicate)
+	local count = 0
+	for _, enemy in ipairs(enemiesList) do
+		if enemy:IsA("Model") and (not filterPredicate or filterPredicate(enemy)) then
+			local eRoot = enemy:FindFirstChild("HumanoidRootPart")
+			local eHum = enemy:FindFirstChildOfClass("Humanoid")
+			if eRoot and eHum and eHum.Health > 0 and (centerPos - eRoot.Position).Magnitude <= 85 then
+				count += 1
+			end
+		end
+	end
+	return count
+end
+
+local function findBestMobForLevel(myPos, myLvl, maxSearchDist)
+	local enemiesFolder = Workspace:FindFirstChild("Enemies")
+	if not enemiesFolder then
+		return nil, nil, nil, nil
+	end
+
+	local plan = getIslandAndMobForLevel(myLvl, myPos)
+	local mobFilter = function(m)
+		return matchesMobEntry(m, plan.mob)
+	end
+	local allEnemies = enemiesFolder:GetChildren()
+	local bestEnemy, bestRoot, bestHum, bestScore = nil, nil, nil, math.huge
+
+	for _, enemy in ipairs(allEnemies) do
+		if enemy:IsA("Model") then
+			local eRoot = enemy:FindFirstChild("HumanoidRootPart")
+			local eHum = enemy:FindFirstChildOfClass("Humanoid")
+			if eRoot and eHum and eHum.Health > 0 then
+				local dist = (myPos - eRoot.Position).Magnitude
+				if not maxSearchDist or dist <= maxSearchDist then
+					local actualLvl = getActualMobLevel(enemy)
+					local isPlannedMob = matchesMobEntry(enemy, plan.mob)
+					local lvlOk = (not actualLvl) or (actualLvl <= myLvl)
+
+					if isPlannedMob then
+						local clusterBonus = AIFarmModeEnabled and (countNearbyCluster(eRoot.Position, allEnemies, mobFilter) * 18) or 0
+						local score = dist - clusterBonus
+						if score < bestScore then
+							bestScore = score
+							bestEnemy = enemy
+							bestRoot = eRoot
+							bestHum = eHum
+						end
+					elseif lvlOk then
+						local diff = actualLvl and math.abs(myLvl - actualLvl) or 35
+						local score = 10000 + dist + (diff * 40)
+						if score < bestScore then
+							bestScore = score
+							bestEnemy = enemy
+							bestRoot = eRoot
+							bestHum = eHum
+						end
+					end
+				end
+			end
+		end
+	end
+
+	return bestEnemy, bestRoot, bestHum, plan
 end
 
 local function getNearestByPredicate(myPos, predicate, maxSearchDist)
 	local enemiesFolder = Workspace:FindFirstChild("Enemies")
 	if not enemiesFolder then
-		return nil, nil, nil, 0
+		return nil, nil, nil
 	end
-	local bestEnemy, bestRoot, bestHum, bestDist = nil, nil, nil, math.huge
-	local count = 0
-	for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+	local allEnemies = enemiesFolder:GetChildren()
+	local bestEnemy, bestRoot, bestHum, bestScore = nil, nil, nil, math.huge
+	for _, enemy in ipairs(allEnemies) do
 		if enemy:IsA("Model") and predicate(enemy) then
 			local eRoot = enemy:FindFirstChild("HumanoidRootPart")
 			local eHum = enemy:FindFirstChildOfClass("Humanoid")
 			if eRoot and eHum and eHum.Health > 0 then
 				local dist = (myPos - eRoot.Position).Magnitude
 				if not maxSearchDist or dist <= maxSearchDist then
-					count += 1
-					if dist < bestDist then
-						bestDist = dist
+					local clusterBonus = AIFarmModeEnabled and (countNearbyCluster(eRoot.Position, allEnemies, predicate) * 18) or 0
+					local score = dist - clusterBonus
+					if score < bestScore then
+						bestScore = score
 						bestEnemy = enemy
 						bestRoot = eRoot
 						bestHum = eHum
@@ -1643,16 +2088,7 @@ local function getNearestByPredicate(myPos, predicate, maxSearchDist)
 			end
 		end
 	end
-	return bestEnemy, bestRoot, bestHum, count
-end
-
-local function matchesBracketEnemy(enemyModel, bracketEntry)
-	if not enemyModel or not bracketEntry then
-		return false
-	end
-	local eNameLower = string.lower(tostring(enemyModel.Name))
-	local targetLower = string.lower(tostring(bracketEntry.enemy))
-	return string.find(eNameLower, targetLower, 1, true) ~= nil
+	return bestEnemy, bestRoot, bestHum
 end
 
 local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, filterPredicate)
@@ -1664,7 +2100,7 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, filterPredicate)
 		if not enemiesFolder then
 			return
 		end
-		local stackPos = mainEnemyRoot and mainEnemyRoot.Position or (centerPos + Vector3.new(0, -6.5, 0))
+		local stackPos = mainEnemyRoot and (mainEnemyRoot.Position + Vector3.new(0, 1.5, 0)) or (centerPos + Vector3.new(0, -6.5, 0))
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 			if enemy:IsA("Model") and (not filterPredicate or filterPredicate(enemy)) then
 				local eRoot = enemy:FindFirstChild("HumanoidRootPart")
@@ -1680,34 +2116,12 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, filterPredicate)
 							end
 						end
 						eRoot.Anchored = false
-						eRoot.CFrame = CFrame.new(stackPos, Vector3.new(centerPos.X, stackPos.Y, centerPos.Z))
+						eRoot.CFrame = CFrame.new(stackPos)
 					end
 				end
 			end
 		end
 	end)
-end
-
-local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefix, statusColor, filterPredicate)
-	if targetEnemy and tRoot and tHum and tHum.Health > 0 then
-		StatusLabel.Text = "●  " .. statusPrefix .. " • " .. tostring(targetEnemy.Name)
-		StatusLabel.TextColor3 = statusColor
-
-		local targetPos = tRoot.Position + Vector3.new(0, 7, 0)
-		local lookCF = CFrame.lookAt(targetPos, tRoot.Position)
-		moveToPositionSmooth(root, targetPos, FlySpeed, 2.5)
-		root.CFrame = lookCF
-		Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
-		root.AssemblyLinearVelocity = Vector3.zero
-		root.AssemblyAngularVelocity = Vector3.zero
-
-		bringMobsUnderPlayer(root.Position, tRoot, filterPredicate)
-		if (root.Position - tRoot.Position).Magnitude <= 22 then
-			triggerHit(char)
-		end
-		return true
-	end
-	return false
 end
 
 local function getActiveSeaEvent(myPos)
@@ -1740,10 +2154,7 @@ local function getActiveSeaEvent(myPos)
 		end
 		return nil, nil
 	end)
-	if ok then
-		return rName, rDist
-	end
-	return nil, nil
+	return ok and rName or nil, ok and rDist or nil
 end
 
 local function getChestDisplayName(part)
@@ -1767,7 +2178,7 @@ local function isValidChestPart(part)
 	end
 	local lowerName = string.lower(part.Name)
 	local parentLower = part.Parent and string.lower(part.Parent.Name) or ""
-	if string.find(lowerName, "hitbox") or string.find(lowerName, "trigger") then
+	if string.find(lowerName, "hitbox", 1, true) or string.find(lowerName, "trigger", 1, true) then
 		return false
 	end
 	for _, allowed in ipairs(AllowedChestNames) do
@@ -1793,188 +2204,6 @@ local function getNearestChest(myRoot)
 	end)
 	return nearestPart, shortestDist
 end
-
-task.spawn(function()
-	while ScriptRunning do
-		task.wait(0.06)
-		pcall(function()
-			local char = LocalPlayer.Character
-			local root = char and char:FindFirstChild("HumanoidRootPart")
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			if not root or not hum or hum.Health <= 0 then
-				ActiveMode = "NONE"
-				return
-			end
-
-			if PvPEnabled or AimBotEnabled then
-				ActiveMode = "PVP"
-				if AimBotEnabled then
-					applyAimBot(root)
-				end
-				if PvPEnabled then
-					local targetPlr = SelectedPvPPlayer
-					if not targetPlr or not targetPlr.Parent or targetPlr == LocalPlayer then
-						StatusLabel.Text = "●  PvP: Select a Player"
-						StatusLabel.TextColor3 = WarnColor
-						return
-					end
-					local tChar = targetPlr.Character
-					local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-					local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
-					if not tRoot or not tHum or tHum.Health <= 0 then
-						StatusLabel.Text = "●  PvP: Waiting " .. tostring(targetPlr.Name)
-						StatusLabel.TextColor3 = WarnColor
-						return
-					end
-					ensureEquippedIfNone()
-					StatusLabel.Text = "●  PvP Lock: " .. tostring(targetPlr.Name) .. " [" .. tostring(math.floor(tHum.Health)) .. " HP]"
-					StatusLabel.TextColor3 = DangerColor
-					local stickPos = tRoot.CFrame * CFrame.new(0, 0, 3.2)
-					local goalCF = CFrame.lookAt(stickPos.Position, tRoot.Position)
-					moveToPositionSmooth(root, goalCF.Position, PvPSpeed, 2.5)
-					root.CFrame = goalCF
-					Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
-					root.AssemblyLinearVelocity = Vector3.zero
-					root.AssemblyAngularVelocity = Vector3.zero
-					if (root.Position - tRoot.Position).Magnitude <= 22 then
-						triggerAutoClickerHit(char)
-					end
-				end
-				return
-			end
-
-			if AutoGetFruitsEnabled then
-				ActiveMode = "FRUIT"
-				local fruitObj, fruitPart, dist, fruitLabel = getNearestDroppedFruit(root.Position)
-				if fruitObj and fruitPart and fruitPart.Parent then
-					StatusLabel.Text = "●  Fruit: " .. tostring(fruitLabel) .. " [" .. tostring(math.floor(dist)) .. "m]"
-					StatusLabel.TextColor3 = FruitColor
-					local goalPos = fruitPart.Position + Vector3.new(0, 1.5, 0)
-					moveToPositionSmooth(root, goalPos, math.max(FlySpeed, 140), 12)
-					if fruitPart.Parent then
-						root.CFrame = CFrame.new(goalPos)
-						for _, desc in ipairs(fruitObj:GetDescendants()) do
-							if desc:IsA("ProximityPrompt") then
-								pcall(function() fireproximityprompt(desc) end)
-							elseif desc:IsA("ClickDetector") and fireclickdetector then
-								pcall(function() fireclickdetector(desc) end)
-							end
-						end
-					end
-				else
-					StatusLabel.Text = "●  Auto Get Fruits: Scanning..."
-					StatusLabel.TextColor3 = AccentSoft
-				end
-				return
-			end
-
-			if AutoChestEnabled then
-				ActiveMode = "CHEST"
-				local targetChest, dist = getNearestChest(root)
-				if targetChest and isValidChestPart(targetChest) then
-					StatusLabel.Text = "●  Chest: " .. tostring(getChestDisplayName(targetChest)) .. " [" .. tostring(math.floor(dist)) .. "m]"
-					StatusLabel.TextColor3 = ChestColor
-					local goalPos = targetChest.Position + Vector3.new(0, 2.5, 0)
-					moveToPositionSmooth(root, goalPos, math.max(FlySpeed, 140), 12)
-					if isValidChestPart(targetChest) then
-						root.CFrame = CFrame.new(goalPos)
-						root.AssemblyLinearVelocity = Vector3.zero
-					end
-				else
-					StatusLabel.Text = "●  Auto Chest: Scanning Map..."
-					StatusLabel.TextColor3 = ChestColor
-				end
-				return
-			end
-
-			if hasActiveTargetFarm() then
-				ActiveMode = "FARM"
-				local myLvl = getPlayerLevel()
-				ensureEquippedIfNone()
-
-				if FarmBonesEnabled then
-					local pred = isBoneEnemy
-					local bEnemy, bRoot, bHum = getNearestByPredicate(root.Position, pred, StayAndWaitRespawn and 320 or nil)
-					if not farmTargetModel(char, root, bEnemy, bRoot, bHum, "Bones", Color3.fromRGB(226, 232, 240), pred) then
-						local anchor = getHauntedCastleBonesPosition()
-						StatusLabel.Text = "●  Bones • Waiting Respawn [" .. tostring(math.floor((root.Position - anchor).Magnitude)) .. "m]"
-						StatusLabel.TextColor3 = WarnColor
-						moveToPositionSmooth(root, anchor, FlySpeed, 8)
-					end
-					return
-				end
-
-				if FarmDragonScaleEnabled then
-					local pred = isDragonScaleEnemy
-					local sEnemy, sRoot, sHum = getNearestByPredicate(root.Position, pred, StayAndWaitRespawn and 320 or nil)
-					if not farmTargetModel(char, root, sEnemy, sRoot, sHum, "Dragon Scale", Color3.fromRGB(251, 146, 60), pred) then
-						local anchor = getHydraDragonScalePosition()
-						StatusLabel.Text = "●  Dragon Scale • Waiting Respawn [" .. tostring(math.floor((root.Position - anchor).Magnitude)) .. "m]"
-						StatusLabel.TextColor3 = WarnColor
-						moveToPositionSmooth(root, anchor, FlySpeed, 8)
-					end
-					return
-				end
-
-				if FarmVampireEnabled then
-					local pred = isVampireEnemy
-					local vEnemy, vRoot, vHum = getNearestByPredicate(root.Position, pred, StayAndWaitRespawn and 320 or nil)
-					if not farmTargetModel(char, root, vEnemy, vRoot, vHum, "Vampire", DangerColor, pred) then
-						StatusLabel.Text = "●  Vampire • Waiting Respawn..."
-						StatusLabel.TextColor3 = WarnColor
-					end
-					return
-				end
-
-				if FarmDemonicSoulEnabled then
-					local pred = isDemonicSoulEnemy
-					local dEnemy, dRoot, dHum = getNearestByPredicate(root.Position, pred, StayAndWaitRespawn and 320 or nil)
-					if not farmTargetModel(char, root, dEnemy, dRoot, dHum, "Demonic Soul", FruitColor, pred) then
-						StatusLabel.Text = "●  Demonic Soul • Waiting Respawn..."
-						StatusLabel.TextColor3 = WarnColor
-					end
-					return
-				end
-
-				local bracket = getLevelBracketEntry(myLvl)
-				local bracketPred = function(m)
-					return matchesBracketEnemy(m, bracket)
-				end
-
-				if AutoQuestEnabled and not hasActiveQuest() then
-					tryTakeQuestForBracket(root, bracket)
-				end
-
-				local searchRadius = StayAndWaitRespawn and 380 or nil
-				local targetEnemy, eRoot, eHum = getNearestByPredicate(root.Position, bracketPred, searchRadius)
-				if not targetEnemy and not StayAndWaitRespawn then
-					targetEnemy, eRoot, eHum = getNearestByPredicate(root.Position, bracketPred, nil)
-				end
-
-				local tag = "Lv." .. tostring(myLvl) .. " [" .. tostring(bracket.minLvl) .. "-" .. tostring(bracket.maxLvl) .. "]"
-				if not farmTargetModel(char, root, targetEnemy, eRoot, eHum, tag, SuccessColor, bracketPred) then
-					local holdPos = findSpawnAnchorForEnemy(bracket.enemy, bracket.pos)
-					local distToHold = (root.Position - holdPos).Magnitude
-					StatusLabel.Text = "●  " .. tag .. " • Holding " .. tostring(bracket.enemy) .. " (Waiting Respawn)"
-					StatusLabel.TextColor3 = WarnColor
-					if distToHold > 14 then
-						moveToPositionSmooth(root, holdPos, FlySpeed, 8)
-					else
-						root.AssemblyLinearVelocity = Vector3.zero
-						root.AssemblyAngularVelocity = Vector3.zero
-					end
-				end
-				return
-			end
-
-			ActiveMode = "NONE"
-			if not AutoSailEnabled then
-				StatusLabel.Text = "●  Status: Ready • Lv." .. tostring(getPlayerLevel())
-				StatusLabel.TextColor3 = AccentCyan
-			end
-		end)
-	end
-end)
 
 task.spawn(function()
 	while ScriptRunning do
@@ -2027,10 +2256,6 @@ task.spawn(function()
 						seat.Steer = 0
 					end
 				else
-					if ActiveMode == "NONE" then
-						StatusLabel.Text = "●  Auto Sailing (" .. tostring(TargetBoatSpeed) .. ")..."
-						StatusLabel.TextColor3 = SuccessColor
-					end
 					applyLockedSailVelocity(seat, TargetBoatSpeed, LockedSailDir)
 				end
 			else
@@ -2038,6 +2263,235 @@ task.spawn(function()
 			end
 		end)
 	end
+end)
+
+RunService.Heartbeat:Connect(function(dt)
+	if not ScriptRunning then
+		return
+	end
+	pcall(function()
+		local char = LocalPlayer.Character
+		local root = char and char:FindFirstChild("HumanoidRootPart")
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if not root or not hum or hum.Health <= 0 then
+			return
+		end
+
+		if AimBotEnabled then
+			applyAimBot(root)
+		end
+
+		if PvPEnabled then
+			local targetPlr = SelectedPvPPlayer
+			if not targetPlr or not targetPlr.Parent or targetPlr == LocalPlayer then
+				StatusLabel.Text = "●  PvP: Select a Player"
+				StatusLabel.TextColor3 = WarnColor
+				return
+			end
+			local tChar = targetPlr.Character
+			local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+			local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
+			if not tRoot or not tHum or tHum.Health <= 0 then
+				StatusLabel.Text = "●  PvP: Waiting " .. tostring(targetPlr.Name)
+				StatusLabel.TextColor3 = WarnColor
+				return
+			end
+			ensureEquippedIfNone()
+			StatusLabel.Text = "●  PvP: " .. tostring(targetPlr.Name) .. " [" .. tostring(math.floor(tHum.Health)) .. " HP]"
+			StatusLabel.TextColor3 = DangerColor
+			local stickPos = tRoot.CFrame * CFrame.new(0, 0, 3.2)
+			local goalCF = CFrame.lookAt(stickPos.Position, tRoot.Position)
+			stepTowardPosition(root, goalCF, PvPSpeed, dt)
+			if (root.Position - tRoot.Position).Magnitude <= 8 then
+				root.CFrame = goalCF
+				Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
+			end
+			if (root.Position - tRoot.Position).Magnitude <= 24 then
+				triggerAutoClickerHit(char)
+			end
+			return
+		end
+
+		if AutoGetFruitsEnabled then
+			local fruitObj, fruitPart, dist, fruitLabel = getNearestDroppedFruit(root.Position)
+			if fruitObj and fruitPart and fruitPart.Parent then
+				StatusLabel.Text = "●  Fruit: " .. tostring(fruitLabel) .. " [" .. tostring(math.floor(dist)) .. "m]"
+				StatusLabel.TextColor3 = FruitColor
+				local goalCF = CFrame.new(fruitPart.Position + Vector3.new(0, 1.5, 0))
+				stepTowardPosition(root, goalCF, math.max(FlySpeed, 140), dt)
+				if (root.Position - goalCF.Position).Magnitude <= 6 and (tick() - LastFruitPickupTick) > 0.15 then
+					LastFruitPickupTick = tick()
+					for _, desc in ipairs(fruitObj:GetDescendants()) do
+						if desc:IsA("ProximityPrompt") then
+							pcall(function() fireproximityprompt(desc) end)
+						elseif desc:IsA("ClickDetector") and fireclickdetector then
+							pcall(function() fireclickdetector(desc) end)
+						end
+					end
+				end
+			else
+				StatusLabel.Text = "●  Auto Get Fruits: Scanning..."
+				StatusLabel.TextColor3 = AccentSoft
+			end
+			return
+		end
+
+		if AutoChestEnabled then
+			local targetChest, dist = getNearestChest(root)
+			if targetChest and isValidChestPart(targetChest) then
+				StatusLabel.Text = "●  Chest: " .. tostring(getChestDisplayName(targetChest)) .. " [" .. tostring(math.floor(dist)) .. "m]"
+				StatusLabel.TextColor3 = ChestColor
+				local goalCF = CFrame.new(targetChest.Position + Vector3.new(0, 2.5, 0))
+				stepTowardPosition(root, goalCF, math.max(FlySpeed, 140), dt)
+			else
+				StatusLabel.Text = "●  Auto Chest: Scanning Map..."
+				StatusLabel.TextColor3 = ChestColor
+			end
+			return
+		end
+
+		if hasActiveTargetFarm() then
+			local myLvl = getPlayerLevel()
+			ensureEquippedIfNone()
+
+			if FarmBonesEnabled then
+				local bEnemy, bRoot, bHum = getNearestByPredicate(root.Position, isBoneEnemy, StayAndWaitRespawn and 340 or nil)
+				if bEnemy and bRoot and bHum and bHum.Health > 0 then
+					StatusLabel.Text = "●  AI Bones • " .. tostring(bEnemy.Name)
+					StatusLabel.TextColor3 = Color3.fromRGB(226, 232, 240)
+					local targetPos = bRoot.Position + Vector3.new(0, 6.2, 0)
+					local lookCF = CFrame.lookAt(targetPos, bRoot.Position)
+					stepTowardPosition(root, lookCF, FlySpeed, dt)
+					if (root.Position - targetPos).Magnitude <= 6.5 then
+						root.CFrame = lookCF
+						Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, bRoot.Position)
+					end
+					bringMobsUnderPlayer(root.Position, bRoot, isBoneEnemy)
+					if (root.Position - bRoot.Position).Magnitude <= 26 then
+						triggerHit(char)
+					end
+				else
+					local anchor = getHauntedCastleBonesPosition()
+					StatusLabel.Text = "●  Bones • Wait [" .. tostring(math.floor((root.Position - anchor).Magnitude)) .. "m]"
+					StatusLabel.TextColor3 = WarnColor
+					stepTowardPosition(root, CFrame.new(anchor), FlySpeed, dt)
+				end
+				return
+			end
+
+			if FarmDragonScaleEnabled then
+				local sEnemy, sRoot, sHum = getNearestByPredicate(root.Position, isDragonScaleEnemy, StayAndWaitRespawn and 340 or nil)
+				if sEnemy and sRoot and sHum and sHum.Health > 0 then
+					StatusLabel.Text = "●  AI Dragon Scale • " .. tostring(sEnemy.Name)
+					StatusLabel.TextColor3 = Color3.fromRGB(251, 146, 60)
+					local targetPos = sRoot.Position + Vector3.new(0, 6.2, 0)
+					local lookCF = CFrame.lookAt(targetPos, sRoot.Position)
+					stepTowardPosition(root, lookCF, FlySpeed, dt)
+					if (root.Position - targetPos).Magnitude <= 6.5 then
+						root.CFrame = lookCF
+						Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, sRoot.Position)
+					end
+					bringMobsUnderPlayer(root.Position, sRoot, isDragonScaleEnemy)
+					if (root.Position - sRoot.Position).Magnitude <= 26 then
+						triggerHit(char)
+					end
+				else
+					local anchor = getHydraDragonScalePosition()
+					StatusLabel.Text = "●  Dragon Scale • Wait [" .. tostring(math.floor((root.Position - anchor).Magnitude)) .. "m]"
+					StatusLabel.TextColor3 = WarnColor
+					stepTowardPosition(root, CFrame.new(anchor), FlySpeed, dt)
+				end
+				return
+			end
+
+			if FarmVampireEnabled then
+				local vEnemy, vRoot, vHum = getNearestByPredicate(root.Position, isVampireEnemy, StayAndWaitRespawn and 340 or nil)
+				if vEnemy and vRoot and vHum and vHum.Health > 0 then
+					StatusLabel.Text = "●  AI Vampire • " .. tostring(vEnemy.Name)
+					StatusLabel.TextColor3 = DangerColor
+					local targetPos = vRoot.Position + Vector3.new(0, 6.2, 0)
+					local lookCF = CFrame.lookAt(targetPos, vRoot.Position)
+					stepTowardPosition(root, lookCF, FlySpeed, dt)
+					if (root.Position - targetPos).Magnitude <= 6.5 then
+						root.CFrame = lookCF
+						Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, vRoot.Position)
+					end
+					bringMobsUnderPlayer(root.Position, vRoot, isVampireEnemy)
+					if (root.Position - vRoot.Position).Magnitude <= 26 then
+						triggerHit(char)
+					end
+				else
+					StatusLabel.Text = "●  Vampire • Waiting Respawn..."
+					StatusLabel.TextColor3 = WarnColor
+				end
+				return
+			end
+
+			if FarmDemonicSoulEnabled then
+				local dEnemy, dRoot, dHum = getNearestByPredicate(root.Position, isDemonicSoulEnemy, StayAndWaitRespawn and 340 or nil)
+				if dEnemy and dRoot and dHum and dHum.Health > 0 then
+					StatusLabel.Text = "●  AI Demonic Soul • " .. tostring(dEnemy.Name)
+					StatusLabel.TextColor3 = FruitColor
+					local targetPos = dRoot.Position + Vector3.new(0, 6.2, 0)
+					local lookCF = CFrame.lookAt(targetPos, dRoot.Position)
+					stepTowardPosition(root, lookCF, FlySpeed, dt)
+					if (root.Position - targetPos).Magnitude <= 6.5 then
+						root.CFrame = lookCF
+						Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, dRoot.Position)
+					end
+					bringMobsUnderPlayer(root.Position, dRoot, isDemonicSoulEnemy)
+					if (root.Position - dRoot.Position).Magnitude <= 26 then
+						triggerHit(char)
+					end
+				else
+					StatusLabel.Text = "●  Demonic Soul • Waiting Respawn..."
+					StatusLabel.TextColor3 = WarnColor
+				end
+				return
+			end
+
+			local searchLimit = StayAndWaitRespawn and 420 or nil
+			local targetEnemy, eRoot, eHum, plan = findBestMobForLevel(root.Position, myLvl, searchLimit)
+			if not targetEnemy and not StayAndWaitRespawn then
+				targetEnemy, eRoot, eHum, plan = findBestMobForLevel(root.Position, myLvl, nil)
+			end
+
+			local bracketTag = "[" .. tostring(plan.mob.minLvl) .. "-" .. tostring(plan.mob.maxLvl) .. "]"
+			if AutoQuestEnabled and not hasActiveQuest() then
+				tryTakeQuestForMob(plan.mob)
+			end
+
+			if targetEnemy and eRoot and eHum and eHum.Health > 0 then
+				StatusLabel.Text = "●  " .. tostring(plan.world) .. " • Lv." .. tostring(myLvl) .. " " .. bracketTag .. " • " .. tostring(targetEnemy.Name)
+				StatusLabel.TextColor3 = SuccessColor
+				local targetPos = eRoot.Position + Vector3.new(0, 6.2, 0)
+				local lookCF = CFrame.lookAt(targetPos, eRoot.Position)
+				stepTowardPosition(root, lookCF, FlySpeed, dt)
+				if (root.Position - targetPos).Magnitude <= 6.5 then
+					root.CFrame = lookCF
+					Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, eRoot.Position)
+				end
+				local mobFilter = function(m)
+					return matchesMobEntry(m, plan.mob)
+				end
+				bringMobsUnderPlayer(root.Position, eRoot, mobFilter)
+				if (root.Position - eRoot.Position).Magnitude <= 26 then
+					triggerHit(char)
+				end
+			else
+				local holdPos = findSpawnAnchorForMob(plan.mob.name, plan.anchor)
+				StatusLabel.Text = "●  " .. tostring(plan.world) .. " " .. bracketTag .. " • Wait " .. tostring(plan.mob.name)
+				StatusLabel.TextColor3 = WarnColor
+				stepTowardPosition(root, CFrame.new(holdPos), FlySpeed, dt)
+			end
+			return
+		end
+
+		if not AutoSailEnabled then
+			StatusLabel.Text = "●  AI Ready (" .. detectCurrentWorld(root.Position) .. ") • Lv." .. tostring(getPlayerLevel())
+			StatusLabel.TextColor3 = AccentCyan
+		end
+	end)
 end)
 
 RunService.Stepped:Connect(function()
@@ -2058,7 +2512,6 @@ RunService.Stepped:Connect(function()
 		if hum and WalkSpeedEnabled and hum.WalkSpeed ~= TargetWalkSpeed then
 			hum.WalkSpeed = TargetWalkSpeed
 		end
-
 		if AutoSailEnabled and hum and hum.SeatPart and root and LockedSailDir then
 			if not getActiveSeaEvent(root.Position) then
 				applyLockedSailVelocity(hum.SeatPart, TargetBoatSpeed, LockedSailDir)
@@ -2291,7 +2744,7 @@ if Drawing then
 			for player, esp in pairs(TrackedPlayers) do
 				if not ESPEnabled or not esp.Box then
 					for _, d in pairs(esp) do
-						d.Visible = false
+						pcall(function() d.Visible = false end)
 					end
 				else
 					local char = player.Character
@@ -2306,37 +2759,43 @@ if Drawing then
 							local height = math.abs(headPos.Y - legPos.Y)
 							local width = height / 2
 
-							esp.Box.Size = Vector2.new(width, height)
-							esp.Box.Position = Vector2.new(pos.X - width / 2, headPos.Y)
-							esp.Box.Visible = true
-
-							esp.Tracer.From = viewportCenter
-							esp.Tracer.To = Vector2.new(pos.X, headPos.Y)
-							esp.Tracer.Visible = true
-
+							pcall(function()
+								esp.Box.Size = Vector2.new(width, height)
+								esp.Box.Position = Vector2.new(pos.X - width / 2, headPos.Y)
+								esp.Box.Visible = true
+							end)
+							pcall(function()
+								esp.Tracer.From = viewportCenter
+								esp.Tracer.To = Vector2.new(pos.X, headPos.Y)
+								esp.Tracer.Visible = true
+							end)
 							local dist = myRoot and math.floor((myRoot.Position - root.Position).Magnitude) or 0
-							esp.Name.Text = player.Name .. " [" .. dist .. "m]"
-							esp.Name.Position = Vector2.new(pos.X, headPos.Y - 16)
-							esp.Name.Visible = true
-
+							pcall(function()
+								esp.Name.Text = player.Name .. " [" .. dist .. "m]"
+								esp.Name.Position = Vector2.new(pos.X, headPos.Y - 16)
+								esp.Name.Visible = true
+							end)
 							local hpPct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
 							local barH = height * hpPct
-							esp.HealthBar.Size = Vector2.new(2, barH)
-							esp.HealthBar.Position = Vector2.new(esp.Box.Position.X - 6, esp.Box.Position.Y + (height - barH))
-							esp.HealthBar.Color = Color3.fromRGB(255 - (hpPct * 255), hpPct * 255, 0)
-							esp.HealthBar.Visible = true
-
-							esp.HealthOutline.Size = Vector2.new(4, height + 2)
-							esp.HealthOutline.Position = Vector2.new(esp.Box.Position.X - 7, esp.Box.Position.Y - 1)
-							esp.HealthOutline.Visible = true
+							pcall(function()
+								esp.HealthBar.Size = Vector2.new(2, barH)
+								esp.HealthBar.Position = Vector2.new(esp.Box.Position.X - 6, esp.Box.Position.Y + (height - barH))
+								esp.HealthBar.Color = Color3.fromRGB(255 - (hpPct * 255), hpPct * 255, 0)
+								esp.HealthBar.Visible = true
+							end)
+							pcall(function()
+								esp.HealthOutline.Size = Vector2.new(4, height + 2)
+								esp.HealthOutline.Position = Vector2.new(esp.Box.Position.X - 7, esp.Box.Position.Y - 1)
+								esp.HealthOutline.Visible = true
+							end)
 						else
 							for _, d in pairs(esp) do
-								d.Visible = false
+								pcall(function() d.Visible = false end)
 							end
 						end
 					else
 						for _, d in pairs(esp) do
-							d.Visible = false
+							pcall(function() d.Visible = false end)
 						end
 					end
 				end
@@ -2347,18 +2806,20 @@ if Drawing then
 					removeNPC(model)
 				elseif not ESPEnabled or not esp.Text then
 					if esp.Text then
-						esp.Text.Visible = false
+						pcall(function() esp.Text.Visible = false end)
 					end
 				else
 					local pos, onScreen = Camera:WorldToViewportPoint(esp.Root.Position)
 					if onScreen then
 						local dist = myRoot and math.floor((myRoot.Position - esp.Root.Position).Magnitude) or 0
 						local tag = esp.IsSeaEvent and "[SEA] " or "[NPC] "
-						esp.Text.Text = tag .. model.Name .. " [" .. dist .. "m]"
-						esp.Text.Position = Vector2.new(pos.X, pos.Y)
-						esp.Text.Visible = true
+						pcall(function()
+							esp.Text.Text = tag .. model.Name .. " [" .. dist .. "m]"
+							esp.Text.Position = Vector2.new(pos.X, pos.Y)
+							esp.Text.Visible = true
+						end)
 					else
-						esp.Text.Visible = false
+						pcall(function() esp.Text.Visible = false end)
 					end
 				end
 			end
@@ -2368,17 +2829,19 @@ if Drawing then
 					removeChest(part)
 				elseif not ChestESPEnabled or not esp.Text then
 					if esp.Text then
-						esp.Text.Visible = false
+						pcall(function() esp.Text.Visible = false end)
 					end
 				else
 					local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
 					if onScreen then
 						local dist = myRoot and math.floor((myRoot.Position - part.Position).Magnitude) or 0
-						esp.Text.Text = "[CHEST] " .. tostring(esp.Label) .. " [" .. dist .. "m]"
-						esp.Text.Position = Vector2.new(pos.X, pos.Y)
-						esp.Text.Visible = true
+						pcall(function()
+							esp.Text.Text = "[CHEST] " .. tostring(esp.Label) .. " [" .. dist .. "m]"
+							esp.Text.Position = Vector2.new(pos.X, pos.Y)
+							esp.Text.Visible = true
+						end)
 					else
-						esp.Text.Visible = false
+						pcall(function() esp.Text.Visible = false end)
 					end
 				end
 			end
@@ -2388,17 +2851,19 @@ if Drawing then
 					removeFruit(obj)
 				elseif not FruitESPEnabled or not esp.Text then
 					if esp.Text then
-						esp.Text.Visible = false
+						pcall(function() esp.Text.Visible = false end)
 					end
 				else
 					local pos, onScreen = Camera:WorldToViewportPoint(esp.Part.Position)
 					if onScreen then
 						local dist = myRoot and math.floor((myRoot.Position - esp.Part.Position).Magnitude) or 0
-						esp.Text.Text = "[FRUIT] " .. tostring(esp.Label) .. " [" .. dist .. "m]"
-						esp.Text.Position = Vector2.new(pos.X, pos.Y)
-						esp.Text.Visible = true
+						pcall(function()
+							esp.Text.Text = "[FRUIT] " .. tostring(esp.Label) .. " [" .. dist .. "m]"
+							esp.Text.Position = Vector2.new(pos.X, pos.Y)
+							esp.Text.Visible = true
+						end)
 					else
-						esp.Text.Visible = false
+						pcall(function() esp.Text.Visible = false end)
 					end
 				end
 			end
@@ -2406,4 +2871,4 @@ if Drawing then
 	end)
 end
 
-print("[NEXOARO V3] Loaded")
+print("[NEXOARO AI V5] Loaded")
