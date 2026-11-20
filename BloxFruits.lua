@@ -616,17 +616,17 @@ local function getIslandAndMobForLevel(lvl, myPos)
 	end
 
 	local exactMatch = nil
-	local belowOrEqualMatch = nil
+	local highestEligible = nil
 
 	for _, isl in ipairs(candidates) do
 		for _, mob in ipairs(isl.mobs) do
 			if lvl >= mob.minLvl and lvl <= mob.maxLvl then
 				exactMatch = {world = isl.world, island = isl.island, anchor = isl.anchor, mob = mob}
 			elseif lvl >= mob.minLvl then
-				if not belowOrEqualMatch
-					or mob.maxLvl > belowOrEqualMatch.mob.maxLvl
-					or (mob.maxLvl == belowOrEqualMatch.mob.maxLvl and myPos and ((myPos - isl.anchor).Magnitude < (myPos - belowOrEqualMatch.anchor).Magnitude)) then
-					belowOrEqualMatch = {world = isl.world, island = isl.island, anchor = isl.anchor, mob = mob}
+				if not highestEligible
+					or mob.minLvl > highestEligible.mob.minLvl
+					or (mob.minLvl == highestEligible.mob.minLvl and mob.maxLvl > highestEligible.mob.maxLvl) then
+					highestEligible = {world = isl.world, island = isl.island, anchor = isl.anchor, mob = mob}
 				end
 			end
 		end
@@ -635,8 +635,8 @@ local function getIslandAndMobForLevel(lvl, myPos)
 	if exactMatch then
 		return exactMatch
 	end
-	if belowOrEqualMatch then
-		return belowOrEqualMatch
+	if highestEligible then
+		return highestEligible
 	end
 	return {world = bestIsland.world, island = bestIsland.island, anchor = bestIsland.anchor, mob = bestIsland.mobs[1]}
 end
@@ -808,14 +808,14 @@ end
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 pcall(function()
 	for _, gui in ipairs(playerGui:GetChildren()) do
-		if gui.Name == "NexoaroHubV5" or gui.Name == "NexoaroHubV4" or gui.Name == "NexoaroHubV3" or gui.Name == "NexoaroController" then
+		if gui.Name == "NexoaroHubV6" or gui.Name == "NexoaroHubV5" or gui.Name == "NexoaroHubV4" or gui.Name == "NexoaroHubV3" or gui.Name == "NexoaroController" then
 			gui:Destroy()
 		end
 	end
 end)
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "NexoaroHubV5"
+ScreenGui.Name = "NexoaroHubV6"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 999
@@ -924,7 +924,7 @@ subStroke.Transparency = 0.45
 local SubTitle = Instance.new("TextLabel")
 SubTitle.Size = UDim2.new(1, 0, 1, 0)
 SubTitle.BackgroundTransparency = 1
-SubTitle.Text = "AI WORLDS • V5"
+SubTitle.Text = "AI WORLDS • V6"
 SubTitle.TextColor3 = AccentCyan
 SubTitle.Font = Enum.Font.GothamBold
 SubTitle.TextSize = 8.5
@@ -956,7 +956,7 @@ local OpenPill = Instance.new("TextButton")
 OpenPill.Size = UDim2.new(0, 134, 0, 34)
 OpenPill.Position = UDim2.new(0.02, 0, 0.1, 0)
 OpenPill.BackgroundColor3 = BgPanel
-OpenPill.Text = "⚡ NEXOARO AI V5"
+OpenPill.Text = "⚡ NEXOARO AI V6"
 OpenPill.TextColor3 = AccentCyan
 OpenPill.Font = Enum.Font.GothamBold
 OpenPill.TextSize = 11
@@ -2013,11 +2013,11 @@ end
 
 local function findBestMobForLevel(myPos, myLvl, maxSearchDist)
 	local enemiesFolder = Workspace:FindFirstChild("Enemies")
+	local plan = getIslandAndMobForLevel(myLvl, myPos)
 	if not enemiesFolder then
-		return nil, nil, nil, nil
+		return nil, nil, nil, plan
 	end
 
-	local plan = getIslandAndMobForLevel(myLvl, myPos)
 	local mobFilter = function(m)
 		return matchesMobEntry(m, plan.mob)
 	end
@@ -2025,34 +2025,19 @@ local function findBestMobForLevel(myPos, myLvl, maxSearchDist)
 	local bestEnemy, bestRoot, bestHum, bestScore = nil, nil, nil, math.huge
 
 	for _, enemy in ipairs(allEnemies) do
-		if enemy:IsA("Model") then
+		if enemy:IsA("Model") and matchesMobEntry(enemy, plan.mob) then
 			local eRoot = enemy:FindFirstChild("HumanoidRootPart")
 			local eHum = enemy:FindFirstChildOfClass("Humanoid")
 			if eRoot and eHum and eHum.Health > 0 then
 				local dist = (myPos - eRoot.Position).Magnitude
 				if not maxSearchDist or dist <= maxSearchDist then
-					local actualLvl = getActualMobLevel(enemy)
-					local isPlannedMob = matchesMobEntry(enemy, plan.mob)
-					local lvlOk = (not actualLvl) or (actualLvl <= myLvl)
-
-					if isPlannedMob then
-						local clusterBonus = AIFarmModeEnabled and (countNearbyCluster(eRoot.Position, allEnemies, mobFilter) * 18) or 0
-						local score = dist - clusterBonus
-						if score < bestScore then
-							bestScore = score
-							bestEnemy = enemy
-							bestRoot = eRoot
-							bestHum = eHum
-						end
-					elseif lvlOk then
-						local diff = actualLvl and math.abs(myLvl - actualLvl) or 35
-						local score = 10000 + dist + (diff * 40)
-						if score < bestScore then
-							bestScore = score
-							bestEnemy = enemy
-							bestRoot = eRoot
-							bestHum = eHum
-						end
+					local clusterBonus = AIFarmModeEnabled and (countNearbyCluster(eRoot.Position, allEnemies, mobFilter) * 18) or 0
+					local score = dist - clusterBonus
+					if score < bestScore then
+						bestScore = score
+						bestEnemy = enemy
+						bestRoot = eRoot
+						bestHum = eHum
 					end
 				end
 			end
@@ -2871,4 +2856,4 @@ if Drawing then
 	end)
 end
 
-print("[NEXOARO AI V5] Loaded")
+print("[NEXOARO AI V6] Loaded")
