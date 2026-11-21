@@ -76,8 +76,8 @@ local PvPEnabled = false
 local AimBotEnabled = false
 local PvPSpeed = 340
 local SelectedPvPPlayer = nil
-local FlySpeed = 320
-local BringRadius = 320
+local FlySpeed = 350
+local BringRadius = 350
 local CurrentTween = nil
 local ActiveTweenOwner = nil
 local ScriptRunning = true
@@ -104,8 +104,8 @@ local FightingStylesList = {
 		name = "Dark Step",
 		calls = {
 			{"BuyBlackLeg"},
-			{"BuyBlackLeg", "Progress"},
-			{"BuyBlackLeg", "Check"}
+			{"BuyBlackLeg", true},
+			{"BuyBlackLeg", "Buy"}
 		},
 		toolKeywords = {"dark step", "black leg", "step"}
 	},
@@ -113,8 +113,8 @@ local FightingStylesList = {
 		name = "Electric",
 		calls = {
 			{"BuyElectro"},
-			{"BuyElectro", "Progress"},
-			{"BuyElectro", "Check"}
+			{"BuyElectro", true},
+			{"BuyElectro", "Buy"}
 		},
 		toolKeywords = {"electric", "electro"}
 	},
@@ -122,8 +122,8 @@ local FightingStylesList = {
 		name = "Water Kung Fu",
 		calls = {
 			{"BuyFishmanKarate"},
-			{"BuyFishmanKarate", "Progress"},
-			{"BuyFishmanKarate", "Check"}
+			{"BuyFishmanKarate", true},
+			{"BuyFishmanKarate", "Buy"}
 		},
 		toolKeywords = {"water kung", "fishman karate", "water kung fu"}
 	},
@@ -140,8 +140,8 @@ local FightingStylesList = {
 		name = "Superhuman",
 		calls = {
 			{"BuySuperhuman"},
-			{"BuySuperhuman", "Progress"},
-			{"BuySuperhuman", "Check"}
+			{"BuySuperhuman", true},
+			{"BuySuperhuman", "Buy"}
 		},
 		toolKeywords = {"superhuman"}
 	},
@@ -149,8 +149,8 @@ local FightingStylesList = {
 		name = "Death Step",
 		calls = {
 			{"BuyDeathStep"},
-			{"BuyDeathStep", "Progress"},
-			{"BuyDeathStep", "Check"}
+			{"BuyDeathStep", true},
+			{"BuyDeathStep", "Buy"}
 		},
 		toolKeywords = {"death step"}
 	},
@@ -158,8 +158,8 @@ local FightingStylesList = {
 		name = "Sharkman Karate",
 		calls = {
 			{"BuySharkmanKarate"},
-			{"BuySharkmanKarate", "Progress"},
-			{"BuySharkmanKarate", "Check"}
+			{"BuySharkmanKarate", true},
+			{"BuySharkmanKarate", "Buy"}
 		},
 		toolKeywords = {"sharkman karate", "sharkman"}
 	},
@@ -167,8 +167,8 @@ local FightingStylesList = {
 		name = "Electric Claw",
 		calls = {
 			{"BuyElectricClaw"},
-			{"BuyElectricClaw", "Progress"},
-			{"BuyElectricClaw", "Check"}
+			{"BuyElectricClaw", true},
+			{"BuyElectricClaw", "Buy"}
 		},
 		toolKeywords = {"electric claw"}
 	},
@@ -176,8 +176,8 @@ local FightingStylesList = {
 		name = "Dragon Talon",
 		calls = {
 			{"BuyDragonTalon"},
-			{"BuyDragonTalon", "Progress"},
-			{"BuyDragonTalon", "Check"}
+			{"BuyDragonTalon", true},
+			{"BuyDragonTalon", "Buy"}
 		},
 		toolKeywords = {"dragon talon"}
 	},
@@ -185,8 +185,8 @@ local FightingStylesList = {
 		name = "Godhuman",
 		calls = {
 			{"BuyGodhuman"},
-			{"BuyGodhuman", "Progress"},
-			{"BuyGodhuman", "Check"}
+			{"BuyGodhuman", true},
+			{"BuyGodhuman", "Buy"}
 		},
 		toolKeywords = {"godhuman"}
 	},
@@ -194,8 +194,8 @@ local FightingStylesList = {
 		name = "Sanguine Art",
 		calls = {
 			{"BuySanguineArt"},
-			{"BuySanguineArt", "Progress"},
-			{"BuySanguineArt", "Check"}
+			{"BuySanguineArt", true},
+			{"BuySanguineArt", "Buy"}
 		},
 		toolKeywords = {"sanguine art", "sanguine"}
 	}
@@ -370,7 +370,7 @@ local function startTween(root, owner, targetCF, speed, maxDur)
 		root.CFrame = targetCF
 		return
 	end
-	local dur = math.clamp(dist / math.max(speed or FlySpeed, 60), 0.04, maxDur or 8)
+	local dur = math.clamp(dist / math.max(speed or FlySpeed, 80), 0.03, maxDur or 6)
 	if CurrentTween and ActiveTweenOwner == owner then
 		pcall(function() CurrentTween:Cancel() end)
 	end
@@ -1384,7 +1384,7 @@ runStep("BuildUI", function()
 					StatusLabel.Text = "●  Shop: Equipped " .. tostring(styleEntry.name)
 					StatusLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
 				else
-					StatusLabel.Text = "●  Shop: Attempted " .. tostring(styleEntry.name)
+					StatusLabel.Text = "●  Shop: Sent Buy (" .. tostring(styleEntry.name) .. ")"
 					StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
 				end
 			end)
@@ -1578,6 +1578,8 @@ runStep("BuildUI", function()
 		AutoQuestFarmEnabled = state
 		if state then
 			LockedFarmBracket = getBracketForLevel(getPlayerLevel())
+			StatusLabel.Text = "●  Farm: Starting..."
+			StatusLabel.TextColor3 = AccentGlow
 		elseif not AutoQuestFarmEnabled then
 			LockedFarmBracket = nil
 		end
@@ -2064,7 +2066,7 @@ runStep("Loops", function()
 			return hits
 		end
 		pcall(function()
-			local tRoot = targetModel:FindFirstChild("HumanoidRootPart")
+			local tRoot = targetModel:FindFirstChild("HumanoidRootPart") or targetModel.PrimaryPart
 			if tRoot and tRoot:IsA("BasePart") then
 				table.insert(hits, {tRoot, tRoot.Position})
 			end
@@ -2095,8 +2097,8 @@ runStep("Loops", function()
 			local enemiesFolder = Workspace:FindFirstChild("Enemies")
 			if enemiesFolder then
 				for _, m in ipairs(enemiesFolder:GetChildren()) do
-					local r = m:FindFirstChild("HumanoidRootPart")
-					if r and (myRoot.Position - r.Position).Magnitude <= 65 then
+					local r = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
+					if r and (myRoot.Position - r.Position).Magnitude <= 85 then
 						addModel(m)
 					end
 				end
@@ -2350,13 +2352,33 @@ runStep("Loops", function()
 
 	local function getBracketEnemy(myPos, bracket)
 		local enemiesFolder = Workspace:FindFirstChild("Enemies")
-		if not enemiesFolder or not bracket then
+		if not enemiesFolder then
 			return nil, nil, nil
 		end
 
 		local bestEnemy, bestRoot, bestHum, bestDist = nil, nil, nil, math.huge
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-			if enemy:IsA("Model") and enemyMatchesBracket(enemy, bracket) then
+			if enemy:IsA("Model") then
+				local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
+				local eHum = enemy:FindFirstChildOfClass("Humanoid")
+				if eRoot and eHum and eHum.Health > 0 then
+					local matched = bracket and enemyMatchesBracket(enemy, bracket) or false
+					local dist = (myPos - eRoot.Position).Magnitude
+					if matched and dist < bestDist then
+						bestDist = dist
+						bestEnemy = enemy
+						bestRoot = eRoot
+						bestHum = eHum
+					end
+				end
+			end
+		end
+		if bestEnemy then
+			return bestEnemy, bestRoot, bestHum
+		end
+
+		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+			if enemy:IsA("Model") then
 				local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
 				local eHum = enemy:FindFirstChildOfClass("Humanoid")
 				if eRoot and eHum and eHum.Health > 0 then
@@ -2390,7 +2412,7 @@ runStep("Loops", function()
 			local stackPos = mainEnemyRoot and (mainEnemyRoot.Position - Vector3.new(0, 1.5, 0)) or (centerPos - Vector3.new(0, 6.5, 0))
 			for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 				if enemy:IsA("Model") and (not activeBracket or enemyMatchesBracket(enemy, activeBracket)) then
-					local eRoot = enemy:FindFirstChild("HumanoidRootPart")
+					local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
 					local eHum = enemy:FindFirstChildOfClass("Humanoid")
 					if eRoot and eHum and eHum.Health > 0 then
 						local dist = (centerPos - eRoot.Position).Magnitude
@@ -2429,7 +2451,7 @@ runStep("Loops", function()
 			end
 
 			bringMobsUnderPlayer(root.Position, tRoot, activeBracket)
-			if (root.Position - tRoot.Position).Magnitude <= 50 then
+			if (root.Position - tRoot.Position).Magnitude <= 55 then
 				triggerHit(char, targetEnemy)
 			end
 			return true
@@ -2516,13 +2538,11 @@ runStep("Loops", function()
 						if not farmTargetModel(char, root, mainEnemy, eRoot, eHum, "Lv." .. tostring(myLvl) .. " | " .. bracket.questText, Color3.fromRGB(74, 222, 128), bracket) then
 							local spawnPos = getSpawnPositionForKeywords(bracket.keywords, root.Position)
 							local distSpawn = (root.Position - spawnPos).Magnitude
-							StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Waiting Respawn: " .. bracket.questText .. " [" .. reqRangeText .. "]"
+							StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Searching Mobs [" .. reqRangeText .. "]..."
 							StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
 							if distSpawn > 14 then
 								startTween(root, "Farm", CFrame.new(spawnPos), FlySpeed, 8)
 							end
-							root.AssemblyLinearVelocity = Vector3.zero
-							root.AssemblyAngularVelocity = Vector3.zero
 						end
 					end
 				end)
