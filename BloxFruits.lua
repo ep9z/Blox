@@ -352,9 +352,10 @@ end
 local function clearFlyMover(root)
 	pcall(function()
 		if root then
-			local bv = root:FindFirstChild("NexoaroFlyVel")
-			if bv then
-				bv:Destroy()
+			for _, obj in ipairs(root:GetChildren()) do
+				if obj.Name == "NexoaroFlyVel" or obj.Name == "NexoaroFlyGyro" then
+					pcall(function() obj:Destroy() end)
+				end
 			end
 		end
 	end)
@@ -374,7 +375,7 @@ local function moveToTarget(root, targetCF, speed)
 		return
 	end
 
-	local stepDist = math.min(dist, math.max(speed or FlySpeed, 80) * 0.08)
+	local stepDist = math.min(dist, math.max(speed or FlySpeed, 120) * 0.05)
 	local nextPos = root.Position + (offset.Unit * stepDist)
 	root.CFrame = CFrame.lookAt(nextPos, targetCF.Position)
 	root.AssemblyLinearVelocity = Vector3.zero
@@ -548,24 +549,21 @@ local function isBoneEnemy(model)
 end
 
 local function getSpawnPositionForKeywords(keywords, fallbackPos)
-	local ok, pos = pcall(function()
-		local spawns = Workspace:FindFirstChild("_WorldOrigin") and Workspace._WorldOrigin:FindFirstChild("EnemySpawns")
-		if spawns then
-			for _, sp in ipairs(spawns:GetChildren()) do
-				local lower = string.lower(sp.Name)
-				for _, kw in ipairs(keywords or {}) do
-					if string.find(lower, string.lower(kw), 1, true) then
-						local part = sp:IsA("BasePart") and sp or sp:FindFirstChildWhichIsA("BasePart", true)
-						if part then
-							return part.Position + Vector3.new(0, 12, 0)
-						end
+	local spawns = Workspace:FindFirstChild("_WorldOrigin") and Workspace._WorldOrigin:FindFirstChild("EnemySpawns")
+	if spawns then
+		for _, sp in ipairs(spawns:GetChildren()) do
+			local lower = string.lower(sp.Name)
+			for _, kw in ipairs(keywords or {}) do
+				if string.find(lower, string.lower(kw), 1, true) then
+					local part = sp:IsA("BasePart") and sp or sp:FindFirstChildWhichIsA("BasePart", true)
+					if part then
+						return part.Position + Vector3.new(0, 12, 0)
 					end
 				end
 			end
 		end
-		return fallbackPos
-	end)
-	return (ok and pos) or fallbackPos
+	end
+	return fallbackPos
 end
 
 local function getHydraDragonScalePosition()
@@ -697,26 +695,22 @@ local function triggerAutoHaki()
 		return
 	end
 	LastHakiTick = now
-	pcall(function()
-		local char = LocalPlayer.Character
-		if not char or char:FindFirstChild("HasBuso") then
-			return
-		end
-		local commf = getCommF()
-		if commf then
-			invokeOrFireRemote(commf, "Buso")
-		end
-	end)
+	local char = LocalPlayer.Character
+	if not char or char:FindFirstChild("HasBuso") then
+		return
+	end
+	local commf = getCommF()
+	if commf then
+		invokeOrFireRemote(commf, "Buso")
+	end
 end
 
 runStep("AntiAFK", function()
 	if VirtualUser and LocalPlayer and LocalPlayer.Idled then
 		LocalPlayer.Idled:Connect(function()
 			if AntiAFKEnabled then
-				pcall(function()
-					safeCall(VirtualUser.CaptureController, VirtualUser)
-					safeCall(VirtualUser.ClickButton2, VirtualUser, Vector2.new(500, 500))
-				end)
+				safeCall(VirtualUser.CaptureController, VirtualUser)
+				safeCall(VirtualUser.ClickButton2, VirtualUser, Vector2.new(500, 500))
 			end
 		end)
 	end
@@ -1580,7 +1574,7 @@ runStep("BuildUI", function()
 		AutoQuestFarmEnabled = state
 		if state then
 			LockedFarmBracket = getBracketForLevel(getPlayerLevel())
-			StatusLabel.Text = "●  Farm: Starting..."
+			StatusLabel.Text = "●  Farm: Active (" .. tostring(LockedFarmBracket.questText) .. ")"
 			StatusLabel.TextColor3 = AccentGlow
 		elseif not AutoQuestFarmEnabled then
 			LockedFarmBracket = nil
@@ -1588,6 +1582,8 @@ runStep("BuildUI", function()
 		if not hasActiveTargetFarm() then
 			CurrentCombatTargetModel = nil
 			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+			StatusLabel.Text = "●  Status: Ready"
+			StatusLabel.TextColor3 = TextMuted
 		end
 	end)
 	createToggle(Container2, "Farm Vampire (Fangs)", 38, false, function(state)
@@ -1919,16 +1915,10 @@ end)
 
 runStep("Loops", function()
 	local function hasActiveQuest()
-		local ok, active = pcall(function()
-			local pg = LocalPlayer:FindFirstChild("PlayerGui")
-			local main = pg and pg:FindFirstChild("Main")
-			local questFrame = main and main:FindFirstChild("Quest")
-			if questFrame and questFrame.Visible then
-				return true
-			end
-			return false
-		end)
-		return ok and active or false
+		local pg = LocalPlayer:FindFirstChild("PlayerGui")
+		local main = pg and pg:FindFirstChild("Main")
+		local questFrame = main and main:FindFirstChild("Quest")
+		return (questFrame and questFrame.Visible) == true
 	end
 
 	local function storeFruitsInInventory()
@@ -1937,24 +1927,22 @@ runStep("Loops", function()
 			return
 		end
 		LastStoreTick = now
-		pcall(function()
-			local commf = getCommF()
-			local containers = {LocalPlayer:FindFirstChild("Backpack"), LocalPlayer.Character}
-			for _, cont in ipairs(containers) do
-				if cont then
-					for _, item in ipairs(cont:GetChildren()) do
-						local resolvedFruit = item:IsA("Tool") and resolveBloxFruitName(item.Name) or nil
-						if resolvedFruit then
-							local fruitKey = getStoreFruitKey(item, resolvedFruit)
-							if commf then
-								invokeOrFireRemote(commf, "StoreFruit", fruitKey, item)
-								invokeOrFireRemote(commf, "StoreFruit", resolvedFruit, item)
-							end
+		local commf = getCommF()
+		local containers = {LocalPlayer:FindFirstChild("Backpack"), LocalPlayer.Character}
+		for _, cont in ipairs(containers) do
+			if cont then
+				for _, item in ipairs(cont:GetChildren()) do
+					local resolvedFruit = item:IsA("Tool") and resolveBloxFruitName(item.Name) or nil
+					if resolvedFruit then
+						local fruitKey = getStoreFruitKey(item, resolvedFruit)
+						if commf then
+							invokeOrFireRemote(commf, "StoreFruit", fruitKey, item)
+							invokeOrFireRemote(commf, "StoreFruit", resolvedFruit, item)
 						end
 					end
 				end
 			end
-		end)
+		end
 	end
 
 	local function tryAutoRollFruit()
@@ -1963,75 +1951,65 @@ runStep("Loops", function()
 			return
 		end
 		LastRollTick = now
-		pcall(function()
-			local commf = getCommF()
-			if commf then
-				invokeOrFireRemote(commf, "Censor")
-				invokeOrFireRemote(commf, "RollFruit")
-			end
-		end)
+		local commf = getCommF()
+		if commf then
+			invokeOrFireRemote(commf, "Censor")
+			invokeOrFireRemote(commf, "RollFruit")
+		end
 	end
 
 	local function getNearestDroppedFruit(myPos)
 		local bestObj, bestPart, bestDist, bestName = nil, nil, math.huge, nil
-		pcall(function()
-			for _, obj in ipairs(Workspace:GetChildren()) do
-				if isPickupableFruitInstance(obj) then
-					local part = getFruitAnchorPart(obj)
-					if part and part.Parent then
-						local d = (myPos - part.Position).Magnitude
-						if d < bestDist then
-							bestDist = d
-							bestObj = obj
-							bestPart = part
-							bestName = resolveBloxFruitName(obj.Name) or obj.Name
-						end
+		for _, obj in ipairs(Workspace:GetChildren()) do
+			if isPickupableFruitInstance(obj) then
+				local part = getFruitAnchorPart(obj)
+				if part and part.Parent then
+					local d = (myPos - part.Position).Magnitude
+					if d < bestDist then
+						bestDist = d
+						bestObj = obj
+						bestPart = part
+						bestName = resolveBloxFruitName(obj.Name) or obj.Name
 					end
 				end
 			end
-		end)
+		end
 		return bestObj, bestPart, bestDist, bestName
 	end
 
-	local function triggerWorldInteract(root, targetContainer)
-		pcall(function()
-			if not targetContainer then
-				return
-			end
-			for _, desc in ipairs(targetContainer:GetDescendants()) do
-				if desc:IsA("ProximityPrompt") then
-					if type(fireproximityprompt) == "function" then
-						safeCall(fireproximityprompt, desc)
-					elseif type(desc.InputHoldBegin) == "function" then
-						pcall(function()
-							desc:InputHoldBegin()
-							task.wait(0.05)
-							if type(desc.InputHoldEnd) == "function" then
-								desc:InputHoldEnd()
-							end
-						end)
-					end
-				elseif desc:IsA("ClickDetector") then
-					if type(fireclickdetector) == "function" then
-						safeCall(fireclickdetector, desc)
-					end
+	local function triggerWorldInteract(targetContainer)
+		if not targetContainer then
+			return
+		end
+		for _, desc in ipairs(targetContainer:GetDescendants()) do
+			if desc:IsA("ProximityPrompt") then
+				if type(fireproximityprompt) == "function" then
+					safeCall(fireproximityprompt, desc)
+				elseif type(desc.InputHoldBegin) == "function" then
+					pcall(function()
+						desc:InputHoldBegin()
+						task.wait(0.05)
+						if type(desc.InputHoldEnd) == "function" then
+							desc:InputHoldEnd()
+						end
+					end)
+				end
+			elseif desc:IsA("ClickDetector") then
+				if type(fireclickdetector) == "function" then
+					safeCall(fireclickdetector, desc)
 				end
 			end
-		end)
+		end
 	end
 
 	task.spawn(function()
 		while ScriptRunning do
-			task.wait(0.12)
+			task.wait(0.1)
 			if AutoGetFruitsEnabled then
-				pcall(function()
-					local char = LocalPlayer.Character
-					local root = char and char:FindFirstChild("HumanoidRootPart")
-					local hum = char and char:FindFirstChildOfClass("Humanoid")
-					if not root or not hum or hum.Health <= 0 then
-						return
-					end
-
+				local char = LocalPlayer.Character
+				local root = char and char:FindFirstChild("HumanoidRootPart")
+				local hum = char and char:FindFirstChildOfClass("Humanoid")
+				if root and hum and hum.Health > 0 then
 					local fruitObj, fruitPart, dist, fruitLabel = getNearestDroppedFruit(root.Position)
 					if fruitObj and fruitPart and fruitPart.Parent then
 						StatusLabel.Text = "●  Fruit: " .. tostring(fruitLabel) .. " [" .. tostring(math.floor(dist)) .. "m]"
@@ -2042,13 +2020,13 @@ runStep("Loops", function()
 
 						if (root.Position - goalCF.Position).Magnitude <= 6 then
 							root.CFrame = goalCF
-							triggerWorldInteract(root, fruitObj)
+							triggerWorldInteract(fruitObj)
 						end
 					else
 						StatusLabel.Text = "●  Auto Get Fruits: Scanning Blox Fruits..."
 						StatusLabel.TextColor3 = AccentGlow
 					end
-				end)
+				end
 			end
 
 			if AutoStoreFruitEnabled then
@@ -2094,58 +2072,54 @@ runStep("Loops", function()
 		return bestPart, bestName
 	end
 
-	local function applyAimBot(char, root)
-		if not AimBotEnabled or not char or not root then
+	local function applyAimBot(root)
+		if not AimBotEnabled or not root then
 			return
 		end
-		pcall(function()
-			local aimPart, aimName = getAimTargetPart(root)
-			if aimPart and Camera then
-				Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, aimPart.Position)
-				local flatLook = CFrame.lookAt(root.Position, Vector3.new(aimPart.Position.X, root.Position.Y, aimPart.Position.Z))
-				root.CFrame = CFrame.new(root.Position) * flatLook.Rotation
-				if not PvPEnabled and not AutoGetFruitsEnabled then
-					StatusLabel.Text = "●  Aim Bot: " .. tostring(aimName)
-					StatusLabel.TextColor3 = AccentGlow
-				end
+		local aimPart, aimName = getAimTargetPart(root)
+		if aimPart and Camera then
+			Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, aimPart.Position)
+			local flatLook = CFrame.lookAt(root.Position, Vector3.new(aimPart.Position.X, root.Position.Y, aimPart.Position.Z))
+			root.CFrame = CFrame.new(root.Position) * flatLook.Rotation
+			if not PvPEnabled and not AutoGetFruitsEnabled then
+				StatusLabel.Text = "●  Aim Bot: " .. tostring(aimName)
+				StatusLabel.TextColor3 = AccentGlow
 			end
-		end)
+		end
 	end
 
 	local function strikeEnemy(char)
 		local now = tick()
-		if (now - LastHitTick) < (FastAttackEnabled and 0.1 or 0.2) then
+		if (now - LastHitTick) < (FastAttackEnabled and 0.08 or 0.18) then
 			return
 		end
 		LastHitTick = now
 		triggerAutoHaki()
 
-		pcall(function()
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			local tool = char and char:FindFirstChildOfClass("Tool")
-			if not tool or not toolMatchesCategory(tool, SelectedFarmWeapon) then
-				equipBestCombatTool()
-				tool = char and char:FindFirstChildOfClass("Tool")
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local tool = char and char:FindFirstChildOfClass("Tool")
+		if not tool or not toolMatchesCategory(tool, SelectedFarmWeapon) then
+			equipBestCombatTool()
+			tool = char and char:FindFirstChildOfClass("Tool")
+		end
+		if hum and hum.Health > 0 and tool and tool:IsA("Tool") then
+			if type(tool.Activate) == "function" then
+				tool:Activate()
 			end
-			if hum and hum.Health > 0 and tool and tool:IsA("Tool") then
-				if type(tool.Activate) == "function" then
-					tool:Activate()
-				end
-				local vp = Camera and Camera.ViewportSize or Vector2.new(1280, 720)
-				local cx, cy = vp.X * 0.5, vp.Y * 0.5
-				if VirtualInputManager then
-					VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
-					VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
-				end
-				if VirtualUser then
-					VirtualUser:CaptureController()
-					VirtualUser:ClickButton1(Vector2.new(cx, cy))
-				end
-				if type(mouse1click) == "function" then
-					mouse1click()
-				end
+			local vp = Camera and Camera.ViewportSize or Vector2.new(1280, 720)
+			local cx, cy = vp.X * 0.5, vp.Y * 0.5
+			if VirtualInputManager then
+				VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
+				VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
 			end
-		end)
+			if VirtualUser then
+				VirtualUser:CaptureController()
+				VirtualUser:ClickButton1(Vector2.new(cx, cy))
+			end
+			if type(mouse1click) == "function" then
+				mouse1click()
+			end
+		end
 	end
 
 	local function triggerAutoClickerHit(char)
@@ -2158,18 +2132,14 @@ runStep("Loops", function()
 
 	task.spawn(function()
 		while ScriptRunning do
-			task.wait(0.06)
+			task.wait(0.05)
 			if PvPEnabled or AimBotEnabled then
-				pcall(function()
-					local char = LocalPlayer.Character
-					local root = char and char:FindFirstChild("HumanoidRootPart")
-					local hum = char and char:FindFirstChildOfClass("Humanoid")
-					if not root or not hum or hum.Health <= 0 then
-						return
-					end
-
+				local char = LocalPlayer.Character
+				local root = char and char:FindFirstChild("HumanoidRootPart")
+				local hum = char and char:FindFirstChildOfClass("Humanoid")
+				if root and hum and hum.Health > 0 then
 					if AimBotEnabled then
-						applyAimBot(char, root)
+						applyAimBot(root)
 					end
 
 					if PvPEnabled then
@@ -2177,35 +2147,33 @@ runStep("Loops", function()
 						if not targetPlr or not targetPlr.Parent or targetPlr == LocalPlayer then
 							StatusLabel.Text = "●  PvP: Select a Player"
 							StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-							return
-						end
+						else
+							local tChar = targetPlr.Character
+							local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+							local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
+							if not tRoot or not tHum or tHum.Health <= 0 then
+								StatusLabel.Text = "●  PvP: Waiting for " .. tostring(targetPlr.Name)
+								StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+							else
+								equipBestCombatTool()
+								StatusLabel.Text = "●  PvP Auto-Click: " .. tostring(targetPlr.Name) .. " [" .. tostring(math.floor(tHum.Health)) .. " HP]"
+								StatusLabel.TextColor3 = EnemyColor
 
-						local tChar = targetPlr.Character
-						local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-						local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
-						if not tRoot or not tHum or tHum.Health <= 0 then
-							StatusLabel.Text = "●  PvP: Waiting for " .. tostring(targetPlr.Name)
-							StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-							return
-						end
+								local stickPos = tRoot.CFrame * CFrame.new(0, 0, 3.0)
+								local goalCF = CFrame.lookAt(stickPos.Position, tRoot.Position)
+								moveToTarget(root, goalCF, PvPSpeed)
 
-						equipBestCombatTool()
-						StatusLabel.Text = "●  PvP Auto-Click: " .. tostring(targetPlr.Name) .. " [" .. tostring(math.floor(tHum.Health)) .. " HP]"
-						StatusLabel.TextColor3 = EnemyColor
+								if Camera and (root.Position - goalCF.Position).Magnitude <= 12 then
+									Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
+								end
 
-						local stickPos = tRoot.CFrame * CFrame.new(0, 0, 3.0)
-						local goalCF = CFrame.lookAt(stickPos.Position, tRoot.Position)
-						moveToTarget(root, goalCF, PvPSpeed)
-
-						if Camera and (root.Position - goalCF.Position).Magnitude <= 12 then
-							Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
-						end
-
-						if (root.Position - tRoot.Position).Magnitude <= 25 then
-							triggerAutoClickerHit(char)
+								if (root.Position - tRoot.Position).Magnitude <= 25 then
+									triggerAutoClickerHit(char)
+								end
+							end
 						end
 					end
-				end)
+				end
 			end
 		end
 	end)
@@ -2214,30 +2182,28 @@ runStep("Loops", function()
 		if not AutoQuestEnabled or not bracket then
 			return
 		end
-		pcall(function()
-			local commf = getCommF()
-			if commf and bracket.questName then
-				invokeOrFireRemote(commf, "StartQuest", bracket.questName, bracket.questNum or 1)
-			end
-			local npcFolder = Workspace:FindFirstChild("NPCs")
-			local searchList = npcFolder and npcFolder:GetChildren() or Workspace:GetChildren()
-			local bestPart, bestDist = nil, math.huge
-			for _, obj in ipairs(searchList) do
-				if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) and not obj:FindFirstChildOfClass("Humanoid") then
-					local part = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-					if part then
-						local d = (root.Position - part.Position).Magnitude
-						if d < bestDist then
-							bestDist = d
-							bestPart = part
-						end
+		local commf = getCommF()
+		if commf and bracket.questName then
+			invokeOrFireRemote(commf, "StartQuest", bracket.questName, bracket.questNum or 1)
+		end
+		local npcFolder = Workspace:FindFirstChild("NPCs")
+		local searchList = npcFolder and npcFolder:GetChildren() or Workspace:GetChildren()
+		local bestPart, bestDist = nil, math.huge
+		for _, obj in ipairs(searchList) do
+			if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) and not obj:FindFirstChildOfClass("Humanoid") then
+				local part = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+				if part then
+					local d = (root.Position - part.Position).Magnitude
+					if d < bestDist then
+						bestDist = d
+						bestPart = part
 					end
 				end
 			end
-			if bestPart and bestDist < 260 then
-				triggerWorldInteract(root, bestPart.Parent)
-			end
-		end)
+		end
+		if bestPart and bestDist < 260 then
+			triggerWorldInteract(bestPart.Parent)
+		end
 	end
 
 	local function getNearestByPredicate(myPos, predicate)
@@ -2315,33 +2281,33 @@ runStep("Loops", function()
 			return
 		end
 		local now = tick()
-		if (now - LastBringTick) < 0.18 then
+		if (now - LastBringTick) < 0.16 then
 			return
 		end
 		LastBringTick = now
-		pcall(function()
-			local enemiesFolder = Workspace:FindFirstChild("Enemies")
-			if not enemiesFolder then
-				return
-			end
-			local stackPos = mainEnemyRoot.Position - Vector3.new(0, 2, 0)
-			for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-				if enemy:IsA("Model") and (not activeBracket or enemyMatchesBracket(enemy, activeBracket)) then
-					local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
-					local eHum = enemy:FindFirstChildOfClass("Humanoid")
-					if eRoot and eHum and eHum.Health > 0 and eRoot ~= mainEnemyRoot then
-						local dist = (centerPos - eRoot.Position).Magnitude
-						if dist <= math.min(BringRadius, 120) then
+		local enemiesFolder = Workspace:FindFirstChild("Enemies")
+		if not enemiesFolder then
+			return
+		end
+		local stackPos = mainEnemyRoot.Position - Vector3.new(0, 2, 0)
+		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+			if enemy:IsA("Model") and (not activeBracket or enemyMatchesBracket(enemy, activeBracket)) then
+				local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
+				local eHum = enemy:FindFirstChildOfClass("Humanoid")
+				if eRoot and eHum and eHum.Health > 0 and eRoot ~= mainEnemyRoot then
+					local dist = (centerPos - eRoot.Position).Magnitude
+					if dist <= math.min(BringRadius, 140) then
+						pcall(function()
 							eRoot.CanCollide = false
 							eRoot.Anchored = false
 							eRoot.AssemblyLinearVelocity = Vector3.zero
 							eRoot.AssemblyAngularVelocity = Vector3.zero
 							eRoot.CFrame = CFrame.new(stackPos)
-						end
+						end)
 					end
 				end
 			end
-		end)
+		end
 	end
 
 	local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefix, statusColor, activeBracket)
@@ -2356,7 +2322,7 @@ runStep("Loops", function()
 			local lookCF = CFrame.lookAt(targetPos, tRoot.Position)
 			moveToTarget(root, lookCF, FlySpeed)
 
-			if (root.Position - tRoot.Position).Magnitude <= 60 then
+			if (root.Position - tRoot.Position).Magnitude <= 70 then
 				bringMobsUnderPlayer(root.Position, tRoot, activeBracket)
 				triggerHit(char)
 			end
@@ -2368,16 +2334,12 @@ runStep("Loops", function()
 
 	task.spawn(function()
 		while ScriptRunning do
-			task.wait(0.06)
+			task.wait(0.05)
 			if hasActiveTargetFarm() then
-				pcall(function()
-					local char = LocalPlayer.Character
-					local root = char and char:FindFirstChild("HumanoidRootPart")
-					local hum = char and char:FindFirstChildOfClass("Humanoid")
-					if not root or not hum or hum.Health <= 0 then
-						return
-					end
-
+				local char = LocalPlayer.Character
+				local root = char and char:FindFirstChild("HumanoidRootPart")
+				local hum = char and char:FindFirstChildOfClass("Humanoid")
+				if root and hum and hum.Health > 0 then
 					local myLvl = getPlayerLevel()
 					equipBestCombatTool()
 
@@ -2392,10 +2354,7 @@ runStep("Loops", function()
 								moveToTarget(root, CFrame.new(castlePos), FlySpeed)
 							end
 						end
-						return
-					end
-
-					if FarmDragonScaleEnabled then
+					elseif FarmDragonScaleEnabled then
 						local scaleEnemy, sRoot, sHum = getNearestByPredicate(root.Position, isDragonScaleEnemy)
 						if not farmTargetModel(char, root, scaleEnemy, sRoot, sHum, "Dragon Scale Farm", Color3.fromRGB(249, 115, 22), nil) then
 							local hydraPos = getHydraDragonScalePosition()
@@ -2406,28 +2365,19 @@ runStep("Loops", function()
 								moveToTarget(root, CFrame.new(hydraPos), FlySpeed)
 							end
 						end
-						return
-					end
-
-					if FarmVampireEnabled then
+					elseif FarmVampireEnabled then
 						local vampEnemy, vRoot, vHum = getNearestByPredicate(root.Position, isVampireEnemy)
 						if not farmTargetModel(char, root, vampEnemy, vRoot, vHum, "Fangs Farm", Color3.fromRGB(244, 63, 94), nil) then
 							StatusLabel.Text = "●  Fangs Farm: Waiting Vampire Respawn..."
 							StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
 						end
-						return
-					end
-
-					if FarmDemonicSoulEnabled then
+					elseif FarmDemonicSoulEnabled then
 						local soulEnemy, sRoot, sHum = getNearestByPredicate(root.Position, isDemonicSoulEnemy)
 						if not farmTargetModel(char, root, soulEnemy, sRoot, sHum, "Demonic Soul Farm", Color3.fromRGB(192, 132, 252), nil) then
 							StatusLabel.Text = "●  Demonic Soul Farm: Waiting Respawn..."
 							StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
 						end
-						return
-					end
-
-					if AutoQuestFarmEnabled then
+					elseif AutoQuestFarmEnabled then
 						if not LockedFarmBracket or myLvl > LockedFarmBracket.maxLvl or myLvl < LockedFarmBracket.minLvl then
 							LockedFarmBracket = getBracketForLevel(myLvl)
 						end
@@ -2451,33 +2401,27 @@ runStep("Loops", function()
 							end
 						end
 					end
-				end)
+				end
 			end
 		end
 	end)
 
 	local function getActiveSeaEvent(myPos)
-		local ok, rName, rDist = pcall(function()
-			for _, folderName in ipairs({"SeaBeasts", "Enemies", "Boats"}) do
-				local folder = Workspace:FindFirstChild(folderName)
-				if folder then
-					for _, obj in ipairs(folder:GetChildren()) do
-						if obj and isSeaEvent(obj.Name) then
-							local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
-							if part then
-								local dist = (myPos - part.Position).Magnitude
-								if dist < 2500 then
-									return obj.Name, math.floor(dist)
-								end
+		for _, folderName in ipairs({"SeaBeasts", "Enemies", "Boats"}) do
+			local folder = Workspace:FindFirstChild(folderName)
+			if folder then
+				for _, obj in ipairs(folder:GetChildren()) do
+					if obj and isSeaEvent(obj.Name) then
+						local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+						if part then
+							local dist = (myPos - part.Position).Magnitude
+							if dist < 2500 then
+								return obj.Name, math.floor(dist)
 							end
 						end
 					end
 				end
 			end
-			return nil, nil
-		end)
-		if ok then
-			return rName, rDist
 		end
 		return nil, nil
 	end
@@ -2517,25 +2461,23 @@ runStep("Loops", function()
 
 	local function getNearestChest(myRoot)
 		local nearestPart, shortestDist = nil, math.huge
-		pcall(function()
-			for _, obj in ipairs(Workspace:GetChildren()) do
-				if isValidChestPart(obj) then
-					local dist = (myRoot.Position - obj.Position).Magnitude
-					if dist < shortestDist then
-						shortestDist, nearestPart = dist, obj
-					end
-				elseif obj:IsA("Model") or obj:IsA("Folder") then
-					for _, child in ipairs(obj:GetChildren()) do
-						if isValidChestPart(child) then
-							local dist = (myRoot.Position - child.Position).Magnitude
-							if dist < shortestDist then
-								shortestDist, nearestPart = dist, child
-							end
+		for _, obj in ipairs(Workspace:GetChildren()) do
+			if isValidChestPart(obj) then
+				local dist = (myRoot.Position - obj.Position).Magnitude
+				if dist < shortestDist then
+					shortestDist, nearestPart = dist, obj
+				end
+			elseif obj:IsA("Model") or obj:IsA("Folder") then
+				for _, child in ipairs(obj:GetChildren()) do
+					if isValidChestPart(child) then
+						local dist = (myRoot.Position - child.Position).Magnitude
+						if dist < shortestDist then
+							shortestDist, nearestPart = dist, child
 						end
 					end
 				end
 			end
-		end)
+		end
 		return nearestPart, shortestDist
 	end
 
@@ -2543,40 +2485,34 @@ runStep("Loops", function()
 		while ScriptRunning do
 			task.wait(0.15)
 			if AutoAttackSeaEnabled then
-				pcall(function()
-					local myChar = LocalPlayer.Character
-					local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-					local enemiesFolder = Workspace:FindFirstChild("Enemies")
-					if myRoot and enemiesFolder then
-						for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-							if enemy:IsA("Model") and isSeaEvent(enemy.Name) then
-								local eRoot = enemy:FindFirstChild("HumanoidRootPart")
-								local eHum = enemy:FindFirstChildOfClass("Humanoid")
-								if eRoot and eHum and eHum.Health > 0 and (myRoot.Position - eRoot.Position).Magnitude < 250 then
-									equipBestCombatTool()
-									triggerHit(myChar)
-									break
-								end
+				local myChar = LocalPlayer.Character
+				local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+				local enemiesFolder = Workspace:FindFirstChild("Enemies")
+				if myRoot and enemiesFolder then
+					for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+						if enemy:IsA("Model") and isSeaEvent(enemy.Name) then
+							local eRoot = enemy:FindFirstChild("HumanoidRootPart")
+							local eHum = enemy:FindFirstChildOfClass("Humanoid")
+							if eRoot and eHum and eHum.Health > 0 and (myRoot.Position - eRoot.Position).Magnitude < 250 then
+								equipBestCombatTool()
+								triggerHit(myChar)
+								break
 							end
 						end
 					end
-				end)
+				end
 			end
 		end
 	end)
 
 	task.spawn(function()
 		while ScriptRunning do
-			task.wait(0.12)
+			task.wait(0.1)
 			if AutoChestEnabled then
-				pcall(function()
-					local char = LocalPlayer.Character
-					local root = char and char:FindFirstChild("HumanoidRootPart")
-					local hum = char and char:FindFirstChildOfClass("Humanoid")
-					if not root or not hum or hum.Health <= 0 then
-						return
-					end
-
+				local char = LocalPlayer.Character
+				local root = char and char:FindFirstChild("HumanoidRootPart")
+				local hum = char and char:FindFirstChildOfClass("Humanoid")
+				if root and hum and hum.Health > 0 then
 					local targetChest, dist = getNearestChest(root)
 					if targetChest and isValidChestPart(targetChest) then
 						StatusLabel.Text = "●  Chest: " .. tostring(getChestDisplayName(targetChest)) .. " [" .. tostring(math.floor(dist)) .. "m]"
@@ -2588,13 +2524,13 @@ runStep("Loops", function()
 						if (root.Position - goalCF.Position).Magnitude <= 5 then
 							root.CFrame = goalCF
 							root.AssemblyLinearVelocity = Vector3.zero
-							task.wait(0.15)
+							task.wait(0.12)
 						end
 					else
 						StatusLabel.Text = "●  Auto Chest: Scanning..."
 						StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
 					end
-				end)
+				end
 			end
 		end
 	end)
@@ -2602,39 +2538,37 @@ runStep("Loops", function()
 	task.spawn(function()
 		while ScriptRunning do
 			task.wait(0.08)
-			pcall(function()
-				local char = LocalPlayer.Character
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				local root = char and char:FindFirstChild("HumanoidRootPart")
+			local char = LocalPlayer.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			local root = char and char:FindFirstChild("HumanoidRootPart")
 
-				if AutoSailEnabled and hum and hum.SeatPart and root then
-					if not LockedSailDir then
-						LockedSailDir = captureStraightSailDirection(hum.SeatPart)
-					end
-					local seat = hum.SeatPart
-					local eventName, eventDist = getActiveSeaEvent(root.Position)
-
-					if eventName then
-						StatusLabel.Text = "●  EVENT: " .. tostring(eventName) .. " [" .. tostring(eventDist) .. "m]"
-						StatusLabel.TextColor3 = SeaBeastColor
-						clearBoatMover(seat)
-						if seat:IsA("VehicleSeat") then
-							seat.Throttle = 0
-							seat.Steer = 0
-						end
-					else
-						StatusLabel.Text = "●  Auto Sailing Straight (" .. tostring(TargetBoatSpeed) .. ")..."
-						StatusLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
-						applyLockedSailVelocity(seat, TargetBoatSpeed, LockedSailDir)
-					end
-				elseif AutoSailEnabled then
-					LockedSailDir = nil
-					StatusLabel.Text = "●  Sit in Boat Seat!"
-					StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-				else
-					LockedSailDir = nil
+			if AutoSailEnabled and hum and hum.SeatPart and root then
+				if not LockedSailDir then
+					LockedSailDir = captureStraightSailDirection(hum.SeatPart)
 				end
-			end)
+				local seat = hum.SeatPart
+				local eventName, eventDist = getActiveSeaEvent(root.Position)
+
+				if eventName then
+					StatusLabel.Text = "●  EVENT: " .. tostring(eventName) .. " [" .. tostring(eventDist) .. "m]"
+					StatusLabel.TextColor3 = SeaBeastColor
+					clearBoatMover(seat)
+					if seat:IsA("VehicleSeat") then
+						seat.Throttle = 0
+						seat.Steer = 0
+					end
+				else
+					StatusLabel.Text = "●  Auto Sailing Straight (" .. tostring(TargetBoatSpeed) .. ")..."
+					StatusLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
+					applyLockedSailVelocity(seat, TargetBoatSpeed, LockedSailDir)
+				end
+			elseif AutoSailEnabled then
+				LockedSailDir = nil
+				StatusLabel.Text = "●  Sit in Boat Seat!"
+				StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+			else
+				LockedSailDir = nil
+			end
 		end
 	end)
 
@@ -2642,49 +2576,47 @@ runStep("Loops", function()
 		if not ScriptRunning then
 			return
 		end
-		pcall(function()
-			local char = LocalPlayer.Character
-			if not char then
-				return
-			end
-			local hum = char:FindFirstChildOfClass("Humanoid")
-			local root = char:FindFirstChild("HumanoidRootPart")
+		local char = LocalPlayer.Character
+		if not char then
+			return
+		end
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		local root = char:FindFirstChild("HumanoidRootPart")
 
-			if WalkOnWaterEnabled and root then
-				ensureWalkOnWaterPart(root.Position)
-			end
+		if WalkOnWaterEnabled and root then
+			ensureWalkOnWaterPart(root.Position)
+		end
 
-			if hum and WalkSpeedEnabled and hum.WalkSpeed ~= TargetWalkSpeed then
-				hum.WalkSpeed = TargetWalkSpeed
-			end
+		if hum and WalkSpeedEnabled and hum.WalkSpeed ~= TargetWalkSpeed then
+			hum.WalkSpeed = TargetWalkSpeed
+		end
 
-			if AutoSailEnabled and hum and hum.SeatPart and root and LockedSailDir then
-				local eventName = getActiveSeaEvent(root.Position)
-				if not eventName then
-					applyLockedSailVelocity(hum.SeatPart, TargetBoatSpeed, LockedSailDir)
+		if AutoSailEnabled and hum and hum.SeatPart and root and LockedSailDir then
+			local eventName = getActiveSeaEvent(root.Position)
+			if not eventName then
+				applyLockedSailVelocity(hum.SeatPart, TargetBoatSpeed, LockedSailDir)
+			end
+		end
+
+		local noclipActive = AutoChestEnabled or hasActiveTargetFarm() or PvPEnabled or AutoGetFruitsEnabled or (BoatNoclipEnabled and hum and hum.SeatPart)
+
+		if noclipActive then
+			for _, part in ipairs(char:GetChildren()) do
+				if part:IsA("BasePart") and part.CanCollide then
+					part.CanCollide = false
 				end
 			end
-
-			local noclipActive = AutoChestEnabled or hasActiveTargetFarm() or PvPEnabled or AutoGetFruitsEnabled or (BoatNoclipEnabled and hum and hum.SeatPart)
-
-			if noclipActive then
-				for _, part in ipairs(char:GetChildren()) do
+		end
+		if BoatNoclipEnabled and hum and hum.SeatPart then
+			local boatModel = hum.SeatPart:FindFirstAncestorOfClass("Model")
+			if boatModel then
+				for _, part in ipairs(boatModel:GetDescendants()) do
 					if part:IsA("BasePart") and part.CanCollide then
 						part.CanCollide = false
 					end
 				end
 			end
-			if BoatNoclipEnabled and hum and hum.SeatPart then
-				local boatModel = hum.SeatPart:FindFirstAncestorOfClass("Model")
-				if boatModel then
-					for _, part in ipairs(boatModel:GetDescendants()) do
-						if part:IsA("BasePart") and part.CanCollide then
-							part.CanCollide = false
-						end
-					end
-				end
-			end
-		end)
+		end
 	end)
 end)
 
