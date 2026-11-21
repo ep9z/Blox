@@ -1355,6 +1355,23 @@ local function applyLockedSailVelocity(seat, speed, dir)
 	end)
 end
 
+local function getPlayerLevel()
+	local ok, lvl = pcall(function()
+		local data = LocalPlayer:FindFirstChild("Data")
+		local levelVal = data and data:FindFirstChild("Level")
+		if levelVal and typeof(levelVal.Value) == "number" then
+			return levelVal.Value
+		end
+		local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
+		local lsLevel = leaderstats and (leaderstats:FindFirstChild("Level") or leaderstats:FindFirstChild("Lvl"))
+		if lsLevel and typeof(lsLevel.Value) == "number" then
+			return lsLevel.Value
+		end
+		return 1
+	end)
+	return ok and lvl or 1
+end
+
 createToggle(Container1, "Auto Sail (Stop on Event)", 0, false, function(state)
 	AutoSailEnabled = state
 	if state then
@@ -1740,23 +1757,6 @@ if LocalPlayer.Character then
 	bindWalkSpeedGuard(LocalPlayer.Character)
 end
 LocalPlayer.CharacterAdded:Connect(bindWalkSpeedGuard)
-
-local function getPlayerLevel()
-	local ok, lvl = pcall(function()
-		local data = LocalPlayer:FindFirstChild("Data")
-		local levelVal = data and data:FindFirstChild("Level")
-		if levelVal and typeof(levelVal.Value) == "number" then
-			return levelVal.Value
-		end
-		local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
-		local lsLevel = leaderstats and (leaderstats:FindFirstChild("Level") or leaderstats:FindFirstChild("Lvl"))
-		if lsLevel and typeof(lsLevel.Value) == "number" then
-			return lsLevel.Value
-		end
-		return 1
-	end)
-	return ok and lvl or 1
-end
 
 local function hasActiveQuest()
 	local ok, active = pcall(function()
@@ -2605,57 +2605,6 @@ if Drawing then
 			if data then
 				pcall(function() if data.Text then data.Text:Remove() end end)
 				TrackedNPCs[model] = nil
-			end
-		end)
-	end
-
-	local function addChest(part)
-		pcall(function()
-			if TrackedChests[part] or not isValidChestPart(part) then
-				return
-			end
-			TrackedChests[part] = {
-				Part = part,
-				Label = getChestDisplayName(part),
-				Text = createDrawing("Text", {Size = 11, Center = true, Outline = true, Color = ChestColor, Visible = false})
-			}
-		end)
-	end
-
-	local function removeChest(part)
-		pcall(function()
-			local data = TrackedChests[part]
-			if data then
-				pcall(function() if data.Text then data.Text:Remove() end end)
-				TrackedChests[part] = nil
-			end
-		end)
-	end
-
-	local function addFruit(obj)
-		pcall(function()
-			if TrackedFruits[obj] or not isPickupableFruitInstance(obj) then
-				return
-			end
-			local part = getFruitAnchorPart(obj)
-			if not part then
-				return
-			end
-			TrackedFruits[obj] = {
-				Object = obj,
-				Part = part,
-				Label = resolveBloxFruitName(obj.Name) or tostring(obj.Name),
-				Text = createDrawing("Text", {Size = 12, Center = true, Outline = true, Color = FruitColor, Visible = false})
-			}
-		end)
-	end
-
-	local function removeFruit(obj)
-		pcall(function()
-			local data = TrackedFruits[obj]
-			if data then
-				pcall(function() if data.Text then data.Text:Remove() end end)
-				TrackedFruits[obj] = nil
 			end
 		end)
 	end
