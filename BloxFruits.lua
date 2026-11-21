@@ -75,10 +75,10 @@ local HydraIslandFallbackPos = Vector3.new(5750, 610, -280)
 local HauntedCastleFallbackPos = Vector3.new(-9500, 145, 6080)
 
 local FightingStylesList = {
-	{name = "Black Leg", remoteArg = "BuyBlackLeg", npcKeywords = {"dark step", "sanji", "black leg"}},
-	{name = "Electro", remoteArg = "BuyElectro", npcKeywords = {"mad scientist", "electro"}},
-	{name = "Fishman Karate", remoteArg = "BuyFishmanKarate", npcKeywords = {"water kung-fu", "fishman karate"}},
-	{name = "Dragon Claw", remoteArg = "BlackbeardReward", extraArg = "DragonClaw", npcKeywords = {"sabi", "dragon claw"}},
+	{name = "Dark Step", remoteArg = "BuyBlackLeg", npcKeywords = {"dark step", "sanji"}},
+	{name = "Electric", remoteArg = "BuyElectro", npcKeywords = {"mad scientist", "electric"}},
+	{name = "Water Kung Fu", remoteArg = "BuyFishmanKarate", npcKeywords = {"water kung-fu", "fishman karate"}},
+	{name = "Dragon Breath", remoteArg = "BlackbeardReward", extraArg = "DragonClaw", npcKeywords = {"sabi", "dragon breath"}},
 	{name = "Superhuman", remoteArg = "BuySuperhuman", npcKeywords = {"martial arts master", "superhuman"}},
 	{name = "Death Step", remoteArg = "BuyDeathStep", npcKeywords = {"phoeyu", "death step"}},
 	{name = "Sharkman Karate", remoteArg = "BuySharkmanKarate", npcKeywords = {"daigrock", "sharkman"}},
