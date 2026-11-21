@@ -1328,7 +1328,7 @@ runStep("BuildUI", function()
 			local char = LocalPlayer.Character
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
 			local backpack = LocalPlayer:FindFirstChild("Backpack")
-			if not char or not hum then
+			if not char or not hum or hum.Health <= 0 then
 				return
 			end
 
@@ -1347,15 +1347,19 @@ runStep("BuildUI", function()
 				end
 			end
 
-			if not current then
+			if not current and backpack then
 				for _, fallbackCat in ipairs({"Melee", "Sword", "Fruit", "Gun"}) do
-					if backpack then
-						for _, tool in ipairs(backpack:GetChildren()) do
-							if toolMatchesCategory(tool, fallbackCat) then
-								safeCall(hum.EquipTool, hum, tool)
-								return
-							end
+					for _, tool in ipairs(backpack:GetChildren()) do
+						if toolMatchesCategory(tool, fallbackCat) then
+							safeCall(hum.EquipTool, hum, tool)
+							return
 						end
+					end
+				end
+				for _, tool in ipairs(backpack:GetChildren()) do
+					if tool:IsA("Tool") and tool.Name ~= "Compass" then
+						safeCall(hum.EquipTool, hum, tool)
+						return
 					end
 				end
 			end
@@ -2060,78 +2064,6 @@ runStep("Loops", function()
 		end
 	end)
 
-	local function collectHitParts(targetModel)
-		local hits = {}
-		if not targetModel or not targetModel.Parent then
-			return hits
-		end
-		pcall(function()
-			local tRoot = targetModel:FindFirstChild("HumanoidRootPart") or targetModel.PrimaryPart
-			if tRoot and tRoot:IsA("BasePart") then
-				table.insert(hits, {tRoot, tRoot.Position})
-			end
-			for _, part in ipairs(targetModel:GetChildren()) do
-				if part:IsA("BasePart") and part ~= tRoot then
-					table.insert(hits, {part, part.Position})
-				end
-			end
-		end)
-		return hits
-	end
-
-	local function collectNearbyCombatTargets(myRoot, primaryTarget)
-		local result = {}
-		local seen = {}
-		local function addModel(m)
-			if m and m:IsA("Model") and not seen[m] then
-				local hum = m:FindFirstChildOfClass("Humanoid")
-				local root = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
-				if hum and hum.Health > 0 and root then
-					seen[m] = true
-					table.insert(result, m)
-				end
-			end
-		end
-		addModel(primaryTarget)
-		if myRoot then
-			local enemiesFolder = Workspace:FindFirstChild("Enemies")
-			if enemiesFolder then
-				for _, m in ipairs(enemiesFolder:GetChildren()) do
-					local r = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
-					if r and (myRoot.Position - r.Position).Magnitude <= 85 then
-						addModel(m)
-					end
-				end
-			end
-		end
-		return result
-	end
-
-	local function fireCombatRemotes(targetModel, myRoot)
-		pcall(function()
-			local targets = collectNearbyCombatTargets(myRoot, targetModel)
-			local allHits = {}
-			for _, m in ipairs(targets) do
-				for _, h in ipairs(collectHitParts(m)) do
-					table.insert(allHits, h)
-				end
-			end
-
-			local net = ReplicatedStorage:FindFirstChild("Modules") and ReplicatedStorage.Modules:FindFirstChild("Net")
-			if net then
-				local regAttack = net:FindFirstChild("RE/RegisterAttack")
-				local regHit = net:FindFirstChild("RE/RegisterHit")
-				if regAttack and regAttack:IsA("RemoteEvent") and type(regAttack.FireServer) == "function" then
-					pcall(function() regAttack:FireServer(0) end)
-				end
-				if regHit and regHit:IsA("RemoteEvent") and type(regHit.FireServer) == "function" and #allHits > 0 then
-					local mainPart = allHits[1][1]
-					pcall(function() regHit:FireServer(mainPart, allHits) end)
-				end
-			end
-		end)
-	end
-
 	local function getAimTargetPart(myRoot)
 		local targetPlr = SelectedPvPPlayer
 		if targetPlr and targetPlr.Parent and targetPlr ~= LocalPlayer then
@@ -2183,54 +2115,48 @@ runStep("Loops", function()
 		end)
 	end
 
-	local function fireCombatStrike(char, minCooldown, useExtraClicks, targetModel)
+	local function strikeEnemy(char)
 		local now = tick()
-		if (now - LastHitTick) < minCooldown then
+		if (now - LastHitTick) < (FastAttackEnabled and 0.1 or 0.2) then
 			return
 		end
 		LastHitTick = now
 		triggerAutoHaki()
+
 		pcall(function()
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			local root = char and char:FindFirstChild("HumanoidRootPart")
 			local tool = char and char:FindFirstChildOfClass("Tool")
-			if not tool then
+			if not tool or not toolMatchesCategory(tool, SelectedFarmWeapon) then
 				equipBestCombatTool()
 				tool = char and char:FindFirstChildOfClass("Tool")
 			end
-			if tool and hum and hum.Health > 0 then
+			if hum and hum.Health > 0 and tool and tool:IsA("Tool") then
 				if type(tool.Activate) == "function" then
-					pcall(function() tool:Activate() end)
+					tool:Activate()
 				end
-				local remote = tool:FindFirstChild("LeftClickRemote") or tool:FindFirstChildWhichIsA("RemoteEvent", true)
-				if remote and type(remote.FireServer) == "function" then
-					pcall(function() remote:FireServer(1) end)
+				local vp = Camera and Camera.ViewportSize or Vector2.new(1280, 720)
+				local cx, cy = vp.X * 0.5, vp.Y * 0.5
+				if VirtualInputManager then
+					VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
+					VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
 				end
-			end
-			fireCombatRemotes(targetModel or CurrentCombatTargetModel, root)
-			local vp = Camera and Camera.ViewportSize or Vector2.new(1280, 720)
-			local x = vp.X * 0.5
-			local y = vp.Y * 0.5
-			if VirtualInputManager and type(VirtualInputManager.SendMouseButtonEvent) == "function" then
-				safeCall(VirtualInputManager.SendMouseButtonEvent, VirtualInputManager, x, y, 0, true, game, 1)
-				safeCall(VirtualInputManager.SendMouseButtonEvent, VirtualInputManager, x, y, 0, false, game, 1)
-			end
-			if VirtualUser then
-				safeCall(VirtualUser.CaptureController, VirtualUser)
-				safeCall(VirtualUser.ClickButton1, VirtualUser, Vector2.new(x, y))
-			end
-			if useExtraClicks and type(mouse1click) == "function" then
-				safeCall(mouse1click)
+				if VirtualUser then
+					VirtualUser:CaptureController()
+					VirtualUser:ClickButton1(Vector2.new(cx, cy))
+				end
+				if type(mouse1click) == "function" then
+					mouse1click()
+				end
 			end
 		end)
 	end
 
-	local function triggerAutoClickerHit(char, targetModel)
-		fireCombatStrike(char, FastAttackEnabled and 0.08 or 0.16, true, targetModel)
+	local function triggerAutoClickerHit(char)
+		strikeEnemy(char)
 	end
 
-	local function triggerHit(char, targetModel)
-		fireCombatStrike(char, FastAttackEnabled and 0.08 or 0.16, true, targetModel)
+	local function triggerHit(char)
+		strikeEnemy(char)
 	end
 
 	task.spawn(function()
@@ -2287,7 +2213,7 @@ runStep("Loops", function()
 						root.AssemblyLinearVelocity = Vector3.zero
 						root.AssemblyAngularVelocity = Vector3.zero
 						if dist <= 25 then
-							triggerAutoClickerHit(char, tChar)
+							triggerAutoClickerHit(char)
 						end
 					end
 				end)
@@ -2396,11 +2322,11 @@ runStep("Loops", function()
 	end
 
 	local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, activeBracket)
-		if not BringMobsEnabled then
+		if not BringMobsEnabled or not mainEnemyRoot then
 			return
 		end
 		local now = tick()
-		if (now - LastBringTick) < 0.14 then
+		if (now - LastBringTick) < 0.18 then
 			return
 		end
 		LastBringTick = now
@@ -2409,14 +2335,14 @@ runStep("Loops", function()
 			if not enemiesFolder then
 				return
 			end
-			local stackPos = mainEnemyRoot and (mainEnemyRoot.Position - Vector3.new(0, 1.5, 0)) or (centerPos - Vector3.new(0, 6.5, 0))
+			local stackPos = mainEnemyRoot.Position - Vector3.new(0, 2, 0)
 			for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 				if enemy:IsA("Model") and (not activeBracket or enemyMatchesBracket(enemy, activeBracket)) then
 					local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
 					local eHum = enemy:FindFirstChildOfClass("Humanoid")
-					if eRoot and eHum and eHum.Health > 0 then
+					if eRoot and eHum and eHum.Health > 0 and eRoot ~= mainEnemyRoot then
 						local dist = (centerPos - eRoot.Position).Magnitude
-						if dist <= BringRadius then
+						if dist <= math.min(BringRadius, 120) then
 							eRoot.CanCollide = false
 							eRoot.Anchored = false
 							eRoot.AssemblyLinearVelocity = Vector3.zero
@@ -2450,9 +2376,9 @@ runStep("Loops", function()
 				root.AssemblyAngularVelocity = Vector3.zero
 			end
 
-			bringMobsUnderPlayer(root.Position, tRoot, activeBracket)
-			if (root.Position - tRoot.Position).Magnitude <= 55 then
-				triggerHit(char, targetEnemy)
+			if (root.Position - tRoot.Position).Magnitude <= 60 then
+				bringMobsUnderPlayer(root.Position, tRoot, activeBracket)
+				triggerHit(char)
 			end
 			return true
 		end
@@ -2648,7 +2574,7 @@ runStep("Loops", function()
 								local eHum = enemy:FindFirstChildOfClass("Humanoid")
 								if eRoot and eHum and eHum.Health > 0 and (myRoot.Position - eRoot.Position).Magnitude < 250 then
 									equipBestCombatTool()
-									triggerHit(myChar, enemy)
+									triggerHit(myChar)
 									break
 								end
 							end
