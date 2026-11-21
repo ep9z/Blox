@@ -1,7 +1,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
@@ -78,8 +77,6 @@ local PvPSpeed = 340
 local SelectedPvPPlayer = nil
 local FlySpeed = 350
 local BringRadius = 350
-local CurrentTween = nil
-local ActiveTweenOwner = nil
 local ScriptRunning = true
 local LastHitTick = 0
 local LastBringTick = 0
@@ -352,36 +349,36 @@ local function safeGetGuiParent()
 	return LocalPlayer:WaitForChild("PlayerGui", 10)
 end
 
-local function stopTween(owner)
-	if CurrentTween and (not owner or ActiveTweenOwner == owner) then
-		pcall(function() CurrentTween:Cancel() end)
-		CurrentTween = nil
-		ActiveTweenOwner = nil
-	end
+local function clearFlyMover(root)
+	pcall(function()
+		if root then
+			local bv = root:FindFirstChild("NexoaroFlyVel")
+			if bv then
+				bv:Destroy()
+			end
+		end
+	end)
 end
 
-local function startTween(root, owner, targetCF, speed, maxDur)
+local function moveToTarget(root, targetCF, speed)
 	if not root or not root.Parent then
 		return
 	end
-	local dist = (root.Position - targetCF.Position).Magnitude
-	if dist <= 3.0 then
-		stopTween(owner)
+	local offset = targetCF.Position - root.Position
+	local dist = offset.Magnitude
+	if dist <= 3.5 then
+		clearFlyMover(root)
 		root.CFrame = targetCF
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
 		return
 	end
-	local dur = math.clamp(dist / math.max(speed or FlySpeed, 80), 0.03, maxDur or 6)
-	if CurrentTween and ActiveTweenOwner == owner then
-		pcall(function() CurrentTween:Cancel() end)
-	end
-	ActiveTweenOwner = owner
-	local ok, tw = pcall(function()
-		return TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = targetCF})
-	end)
-	if ok and tw then
-		CurrentTween = tw
-		pcall(function() tw:Play() end)
-	end
+
+	local stepDist = math.min(dist, math.max(speed or FlySpeed, 80) * 0.08)
+	local nextPos = root.Position + (offset.Unit * stepDist)
+	root.CFrame = CFrame.lookAt(nextPos, targetCF.Position)
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
 end
 
 local function getBracketForLevel(lvl)
@@ -881,12 +878,13 @@ runStep("BuildUI", function()
 		end
 		pcall(function()
 			local char = LocalPlayer.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			clearFlyMover(root)
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
 			if hum then
 				hum.WalkSpeed = 16
 			end
 		end)
-		stopTween()
 		for _, esp in pairs(TrackedPlayers) do
 			for _, d in pairs(esp) do
 				safeRemoveDrawing(d)
@@ -1320,7 +1318,7 @@ runStep("BuildUI", function()
 		elseif category == "Gun" then
 			return tip == "gun" or string.find(tip, "gun", 1, true) ~= nil
 		end
-		return false
+		return true
 	end
 
 	equipSelectedWeapon = function(preferredCategory)
@@ -1556,7 +1554,7 @@ runStep("BuildUI", function()
 	createToggle(Container1, "Auto Chest (All Map)", 76, false, function(state)
 		AutoChestEnabled = state
 		if not state then
-			stopTween("Chest")
+			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
 			StatusLabel.Text = "●  Status: Ready"
 			StatusLabel.TextColor3 = TextMuted
 		end
@@ -1589,35 +1587,35 @@ runStep("BuildUI", function()
 		end
 		if not hasActiveTargetFarm() then
 			CurrentCombatTargetModel = nil
-			stopTween("Farm")
+			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
 		end
 	end)
 	createToggle(Container2, "Farm Vampire (Fangs)", 38, false, function(state)
 		FarmVampireEnabled = state
 		if not hasActiveTargetFarm() then
 			CurrentCombatTargetModel = nil
-			stopTween("Farm")
+			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
 		end
 	end)
 	createToggle(Container2, "Farm Demonic Soul", 76, false, function(state)
 		FarmDemonicSoulEnabled = state
 		if not hasActiveTargetFarm() then
 			CurrentCombatTargetModel = nil
-			stopTween("Farm")
+			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
 		end
 	end)
 	createToggle(Container2, "Auto farm dragon scale", 114, false, function(state)
 		FarmDragonScaleEnabled = state
 		if not hasActiveTargetFarm() then
 			CurrentCombatTargetModel = nil
-			stopTween("Farm")
+			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
 		end
 	end)
 	createToggle(Container2, "Auto Farm Bones", 152, false, function(state)
 		FarmBonesEnabled = state
 		if not hasActiveTargetFarm() then
 			CurrentCombatTargetModel = nil
-			stopTween("Farm")
+			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
 		end
 	end)
 
@@ -1698,7 +1696,7 @@ runStep("BuildUI", function()
 	createToggle(Container5, "Auto Kill Target", 0, false, function(state)
 		PvPEnabled = state
 		if not state then
-			stopTween("PvP")
+			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
 			if not AimBotEnabled then
 				StatusLabel.Text = "●  Status: Ready"
 				StatusLabel.TextColor3 = TextMuted
@@ -1769,7 +1767,7 @@ runStep("BuildUI", function()
 	createToggle(Container6, "Auto Get Fruits", 0, false, function(state)
 		AutoGetFruitsEnabled = state
 		if not state then
-			stopTween("Fruit")
+			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
 			StatusLabel.Text = "●  Status: Ready"
 			StatusLabel.TextColor3 = TextMuted
 		end
@@ -2024,7 +2022,7 @@ runStep("Loops", function()
 
 	task.spawn(function()
 		while ScriptRunning do
-			task.wait(0.15)
+			task.wait(0.12)
 			if AutoGetFruitsEnabled then
 				pcall(function()
 					local char = LocalPlayer.Character
@@ -2040,10 +2038,9 @@ runStep("Loops", function()
 						StatusLabel.TextColor3 = FruitColor
 
 						local goalCF = fruitPart.CFrame + Vector3.new(0, 1.5, 0)
-						startTween(root, "Fruit", goalCF, FlySpeed, 12)
+						moveToTarget(root, goalCF, FlySpeed)
 
 						if (root.Position - goalCF.Position).Magnitude <= 6 then
-							stopTween("Fruit")
 							root.CFrame = goalCF
 							triggerWorldInteract(root, fruitObj)
 						end
@@ -2198,21 +2195,13 @@ runStep("Loops", function()
 
 						local stickPos = tRoot.CFrame * CFrame.new(0, 0, 3.0)
 						local goalCF = CFrame.lookAt(stickPos.Position, tRoot.Position)
-						local dist = (root.Position - goalCF.Position).Magnitude
+						moveToTarget(root, goalCF, PvPSpeed)
 
-						if dist > 4 then
-							startTween(root, "PvP", goalCF, PvPSpeed, 2.5)
-						else
-							stopTween("PvP")
-							root.CFrame = goalCF
-							if Camera then
-								Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
-							end
+						if Camera and (root.Position - goalCF.Position).Magnitude <= 12 then
+							Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
 						end
 
-						root.AssemblyLinearVelocity = Vector3.zero
-						root.AssemblyAngularVelocity = Vector3.zero
-						if dist <= 25 then
+						if (root.Position - tRoot.Position).Magnitude <= 25 then
 							triggerAutoClickerHit(char)
 						end
 					end
@@ -2365,16 +2354,7 @@ runStep("Loops", function()
 			local hoverHeight = (SelectedFarmWeapon == "Gun") and 10 or 7
 			local targetPos = tRoot.Position + Vector3.new(0, hoverHeight, 0)
 			local lookCF = CFrame.lookAt(targetPos, tRoot.Position)
-			local dist = (root.Position - targetPos).Magnitude
-
-			if dist > 4.0 then
-				startTween(root, "Farm", lookCF, FlySpeed, 2.5)
-			else
-				stopTween("Farm")
-				root.CFrame = lookCF
-				root.AssemblyLinearVelocity = Vector3.zero
-				root.AssemblyAngularVelocity = Vector3.zero
-			end
+			moveToTarget(root, lookCF, FlySpeed)
 
 			if (root.Position - tRoot.Position).Magnitude <= 60 then
 				bringMobsUnderPlayer(root.Position, tRoot, activeBracket)
@@ -2409,7 +2389,7 @@ runStep("Loops", function()
 							StatusLabel.Text = "●  Bones Farm: Moving/Waiting [" .. tostring(math.floor(distToCastle)) .. "m]"
 							StatusLabel.TextColor3 = Color3.fromRGB(226, 232, 240)
 							if distToCastle > 12 then
-								startTween(root, "Farm", CFrame.new(castlePos), FlySpeed, 8)
+								moveToTarget(root, CFrame.new(castlePos), FlySpeed)
 							end
 						end
 						return
@@ -2423,7 +2403,7 @@ runStep("Loops", function()
 							StatusLabel.Text = "●  Dragon Scale Farm: Moving/Waiting [" .. tostring(math.floor(distToHydra)) .. "m]"
 							StatusLabel.TextColor3 = Color3.fromRGB(249, 115, 22)
 							if distToHydra > 12 then
-								startTween(root, "Farm", CFrame.new(hydraPos), FlySpeed, 8)
+								moveToTarget(root, CFrame.new(hydraPos), FlySpeed)
 							end
 						end
 						return
@@ -2467,7 +2447,7 @@ runStep("Loops", function()
 							StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Searching Mobs [" .. reqRangeText .. "]..."
 							StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
 							if distSpawn > 14 then
-								startTween(root, "Farm", CFrame.new(spawnPos), FlySpeed, 8)
+								moveToTarget(root, CFrame.new(spawnPos), FlySpeed)
 							end
 						end
 					end
@@ -2587,7 +2567,7 @@ runStep("Loops", function()
 
 	task.spawn(function()
 		while ScriptRunning do
-			task.wait(0.15)
+			task.wait(0.12)
 			if AutoChestEnabled then
 				pcall(function()
 					local char = LocalPlayer.Character
@@ -2603,13 +2583,12 @@ runStep("Loops", function()
 						StatusLabel.TextColor3 = ChestColor
 
 						local goalCF = targetChest.CFrame + Vector3.new(0, 2.5, 0)
-						startTween(root, "Chest", goalCF, FlySpeed, 12)
+						moveToTarget(root, goalCF, FlySpeed)
 
 						if (root.Position - goalCF.Position).Magnitude <= 5 then
-							stopTween("Chest")
 							root.CFrame = goalCF
 							root.AssemblyLinearVelocity = Vector3.zero
-							task.wait(0.18)
+							task.wait(0.15)
 						end
 					else
 						StatusLabel.Text = "●  Auto Chest: Scanning..."
