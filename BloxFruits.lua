@@ -40,13 +40,13 @@ local FarmVampireEnabled = false
 local FarmDemonicSoulEnabled = false
 local FarmDragonScaleEnabled = false
 local FarmBonesEnabled = false
-local BringMobsEnabled = true
+local BringMobsEnabled = false
 local AutoQuestEnabled = true
 local FastAttackEnabled = true
 local AutoHakiEnabled = true
 local AntiAFKEnabled = true
 local WalkOnWaterEnabled = false
-local ESPEnabled = true
+local ESPEnabled = false
 local ChestESPEnabled = false
 local RemoveFogEnabled = false
 local FruitESPEnabled = false
@@ -58,11 +58,12 @@ local AimBotEnabled = false
 local PvPSpeed = 340
 local SelectedPvPPlayer = nil
 local FlySpeed = 320
-local BringRadius = 350
+local BringRadius = 280
 local CurrentTween = nil
 local ActiveTweenOwner = nil
 local ScriptRunning = true
 local LastHitTick = 0
+local LastBringTick = 0
 local LastRollTick = 0
 local LastStoreTick = 0
 local LastHakiTick = 0
@@ -230,12 +231,12 @@ local function startTween(root, owner, targetCF, speed, maxDur)
 		return
 	end
 	local dist = (root.Position - targetCF.Position).Magnitude
-	if dist <= 3.5 then
+	if dist <= 3.0 then
 		stopTween(owner)
 		root.CFrame = targetCF
 		return
 	end
-	local dur = math.clamp(dist / math.max(speed or FlySpeed, 60), 0.03, maxDur or 8)
+	local dur = math.clamp(dist / math.max(speed or FlySpeed, 60), 0.04, maxDur or 8)
 	if CurrentTween and ActiveTweenOwner == owner then
 		pcall(function() CurrentTween:Cancel() end)
 	end
@@ -547,7 +548,7 @@ local function triggerAutoHaki()
 		return
 	end
 	local now = tick()
-	if (now - LastHakiTick) < 6 then
+	if (now - LastHakiTick) < 8 then
 		return
 	end
 	LastHakiTick = now
@@ -1413,7 +1414,7 @@ createToggle(Container2, "Auto Farm Bones", 152, false, function(state)
 		stopTween("Farm")
 	end
 end)
-createToggle(Container2, "Bring Mobs Under You", 190, true, function(state)
+createToggle(Container2, "Bring Mobs Under You", 190, false, function(state)
 	BringMobsEnabled = state
 end)
 createToggle(Container2, "Auto Quest (Level Based)", 228, true, function(state)
@@ -1464,7 +1465,7 @@ createToggle(Container3, "Auto Attack Sea Beast / Shark", 202, false, function(s
 	AutoAttackSeaEnabled = state
 end)
 
-createToggle(Container4, "ESP (Players & Sea)", 0, true, function(state) ESPEnabled = state end)
+createToggle(Container4, "ESP (Players & Sea)", 0, false, function(state) ESPEnabled = state end)
 createToggle(Container4, "ESP (Chests)", 38, false, function(state) ChestESPEnabled = state end)
 createToggle(Container4, "Remove Fog", 76, false, function(state)
 	RemoveFogEnabled = state
@@ -1769,7 +1770,7 @@ end
 local function getNearestDroppedFruit(myPos)
 	local bestObj, bestPart, bestDist, bestName = nil, nil, math.huge, nil
 	pcall(function()
-		for _, obj in ipairs(Workspace:GetDescendants()) do
+		for _, obj in ipairs(Workspace:GetChildren()) do
 			if isPickupableFruitInstance(obj) then
 				local part = getFruitAnchorPart(obj)
 				if part and part.Parent then
@@ -1789,7 +1790,7 @@ end
 
 task.spawn(function()
 	while ScriptRunning do
-		task.wait(0.12)
+		task.wait(0.15)
 		if AutoGetFruitsEnabled then
 			pcall(function()
 				local char = LocalPlayer.Character
@@ -1907,43 +1908,49 @@ local function fireCombatStrike(char, minCooldown, useExtraClicks)
 	LastHitTick = now
 	triggerAutoHaki()
 	pcall(function()
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
 		local tool = char and char:FindFirstChildOfClass("Tool")
-		if tool then
-			tool:Activate()
+		if not tool then
+			equipBestCombatTool()
+			tool = char and char:FindFirstChildOfClass("Tool")
+		end
+		if tool and hum and hum.Health > 0 then
+			pcall(function() tool:Activate() end)
+			local remote = tool:FindFirstChild("LeftClickRemote") or tool:FindFirstChildWhichIsA("RemoteEvent", true)
+			if remote then
+				pcall(function() remote:FireServer(1) end)
+			end
 		end
 		local x = Camera.ViewportSize.X * 0.5
 		local y = Camera.ViewportSize.Y * 0.5
 		if VirtualInputManager then
-			VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
-			VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
-		else
-			VirtualUser:CaptureController()
-			VirtualUser:ClickButton1(Vector2.new(x, y))
+			pcall(function() VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1) end)
+			pcall(function() VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1) end)
 		end
-		if useExtraClicks then
+		pcall(function()
 			VirtualUser:CaptureController()
 			VirtualUser:ClickButton1(Vector2.new(x, y))
-			if mouse1click then
-				mouse1click()
-			end
+		end)
+		if useExtraClicks and mouse1click then
+			pcall(function() mouse1click() end)
 		end
 	end)
 end
 
 local function triggerAutoClickerHit(char)
-	fireCombatStrike(char, FastAttackEnabled and 0.03 or 0.08, true)
+	fireCombatStrike(char, FastAttackEnabled and 0.09 or 0.16, true)
 end
 
 local function triggerHit(char)
 	if isPointerOverUI() then
 		return
 	end
-	fireCombatStrike(char, FastAttackEnabled and 0.045 or 0.11, false)
+	fireCombatStrike(char, FastAttackEnabled and 0.11 or 0.18, false)
 end
 
 task.spawn(function()
 	while ScriptRunning do
-		task.wait(0.03)
+		task.wait(0.06)
 		if PvPEnabled or AimBotEnabled then
 			pcall(function()
 				local char = LocalPlayer.Character
@@ -1978,7 +1985,7 @@ task.spawn(function()
 					StatusLabel.Text = "●  PvP Auto-Click: " .. tostring(targetPlr.Name) .. " [" .. tostring(math.floor(tHum.Health)) .. " HP]"
 					StatusLabel.TextColor3 = EnemyColor
 
-					local stickPos = tRoot.CFrame * CFrame.new(0, 0, 3.2)
+					local stickPos = tRoot.CFrame * CFrame.new(0, 0, 3.0)
 					local goalCF = CFrame.lookAt(stickPos.Position, tRoot.Position)
 					local dist = (root.Position - goalCF.Position).Magnitude
 
@@ -1992,7 +1999,7 @@ task.spawn(function()
 
 					root.AssemblyLinearVelocity = Vector3.zero
 					root.AssemblyAngularVelocity = Vector3.zero
-					if dist <= 25 then
+					if dist <= 22 then
 						triggerAutoClickerHit(char)
 					end
 				end
@@ -2004,10 +2011,12 @@ end)
 local function findQuestNPC(myPos)
 	local bestPart, bestDist = nil, math.huge
 	pcall(function()
-		for _, obj in ipairs(Workspace:GetDescendants()) do
+		local npcFolder = Workspace:FindFirstChild("NPCs")
+		local searchList = npcFolder and npcFolder:GetChildren() or Workspace:GetChildren()
+		for _, obj in ipairs(searchList) do
 			if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) and not obj:FindFirstChildOfClass("Humanoid") then
 				if string.find(string.lower(obj.Name), "quest") then
-					local part = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
+					local part = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
 					if part then
 						local d = (myPos - part.Position).Magnitude
 						if d < bestDist then
@@ -2031,18 +2040,6 @@ local function interactWithQuest(root, questPart)
 					pcall(function() fireproximityprompt(desc) end)
 				elseif desc:IsA("ClickDetector") and fireclickdetector then
 					pcall(function() fireclickdetector(desc) end)
-				end
-			end
-		end
-		for _, gui in ipairs(playerGui:GetDescendants()) do
-			if gui:IsA("TextButton") and gui.Visible then
-				local txt = string.lower(gui.Text)
-				if string.find(txt, "accept") or string.find(txt, "start") or string.find(txt, "quest") then
-					if getconnections then
-						for _, conn in ipairs(getconnections(gui.MouseButton1Click)) do
-							pcall(function() conn:Fire() end)
-						end
-					end
 				end
 			end
 		end
@@ -2103,12 +2100,17 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, activeBracket)
 	if not BringMobsEnabled then
 		return
 	end
+	local now = tick()
+	if (now - LastBringTick) < 0.14 then
+		return
+	end
+	LastBringTick = now
 	pcall(function()
 		local enemiesFolder = Workspace:FindFirstChild("Enemies")
 		if not enemiesFolder then
 			return
 		end
-		local stackPos = mainEnemyRoot and mainEnemyRoot.Position or (centerPos + Vector3.new(0, -6.5, 0))
+		local stackPos = mainEnemyRoot and mainEnemyRoot.Position or (centerPos + Vector3.new(0, -5, 0))
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 			if enemy:IsA("Model") and (not activeBracket or enemyMatchesBracket(enemy, activeBracket)) then
 				local eRoot = enemy:FindFirstChild("HumanoidRootPart")
@@ -2116,15 +2118,11 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, activeBracket)
 				if eRoot and eHum and eHum.Health > 0 then
 					local dist = (centerPos - eRoot.Position).Magnitude
 					if dist <= BringRadius then
-						for _, part in ipairs(enemy:GetDescendants()) do
-							if part:IsA("BasePart") then
-								part.CanCollide = false
-								part.AssemblyLinearVelocity = Vector3.zero
-								part.AssemblyAngularVelocity = Vector3.zero
-							end
-						end
+						eRoot.CanCollide = false
 						eRoot.Anchored = false
-						eRoot.CFrame = CFrame.new(stackPos, Vector3.new(centerPos.X, stackPos.Y, centerPos.Z))
+						eRoot.AssemblyLinearVelocity = Vector3.zero
+						eRoot.AssemblyAngularVelocity = Vector3.zero
+						eRoot.CFrame = CFrame.new(stackPos)
 					end
 				end
 			end
@@ -2138,22 +2136,22 @@ local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefi
 		StatusLabel.Text = "●  " .. statusPrefix .. ": " .. tostring(targetEnemy.Name) .. reqTag
 		StatusLabel.TextColor3 = statusColor
 
-		local targetPos = tRoot.Position + Vector3.new(0, 6.5, 0)
+		local targetPos = tRoot.Position + Vector3.new(0, 4.5, 0)
 		local lookCF = CFrame.lookAt(targetPos, tRoot.Position)
 		local dist = (root.Position - targetPos).Magnitude
 
-		if dist > 6.5 then
+		if dist > 4.5 then
 			startTween(root, "Farm", lookCF, FlySpeed, 2.5)
 		else
 			stopTween("Farm")
 			root.CFrame = lookCF
-			Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
+			Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position + Vector3.new(0, 2, 0), tRoot.Position)
 		end
 
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
 		bringMobsUnderPlayer(root.Position, tRoot, activeBracket)
-		if dist <= 22 then
+		if dist <= 18 then
 			triggerHit(char)
 		end
 		return true
@@ -2163,7 +2161,7 @@ end
 
 task.spawn(function()
 	while ScriptRunning do
-		task.wait(0.05)
+		task.wait(0.08)
 		if hasActiveTargetFarm() then
 			pcall(function()
 				local char = LocalPlayer.Character
@@ -2230,7 +2228,7 @@ task.spawn(function()
 					local bracket = LockedFarmBracket
 					local reqRangeText = "Lv." .. tostring(bracket.minLvl) .. "-" .. tostring(bracket.maxLvl)
 
-					if AutoQuestEnabled and not hasActiveQuest() and (tick() - LastQuestAttemptTick) > 1.5 then
+					if AutoQuestEnabled and not hasActiveQuest() and (tick() - LastQuestAttemptTick) > 2.0 then
 						local qPart, qDist = findQuestNPC(root.Position)
 						if qPart and qDist < 220 then
 							LastQuestAttemptTick = tick()
@@ -2254,40 +2252,18 @@ task.spawn(function()
 					end
 				end
 			end)
-		else
-			pcall(function()
-				local enemiesFolder = Workspace:FindFirstChild("Enemies")
-				if enemiesFolder then
-					for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-						local eRoot = enemy:FindFirstChild("HumanoidRootPart")
-						if eRoot and eRoot.Anchored then
-							eRoot.Anchored = false
-						end
-					end
-				end
-			end)
 		end
 	end
 end)
 
 local function getActiveSeaEvent(myPos)
 	local ok, rName, rDist = pcall(function()
-		for model, esp in pairs(TrackedNPCs) do
-			if model and model.Parent and esp and esp.Root and esp.Root.Parent and esp.Humanoid and esp.Humanoid.Health > 0 then
-				if isSeaEvent(model.Name) then
-					local dist = (myPos - esp.Root.Position).Magnitude
-					if dist < 2500 then
-						return model.Name, math.floor(dist)
-					end
-				end
-			end
-		end
 		for _, folderName in ipairs({"SeaBeasts", "Enemies", "Boats"}) do
 			local folder = Workspace:FindFirstChild(folderName)
 			if folder then
 				for _, obj in ipairs(folder:GetChildren()) do
 					if obj and isSeaEvent(obj.Name) then
-						local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart", true)
+						local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
 						if part then
 							local dist = (myPos - part.Position).Magnitude
 							if dist < 2500 then
@@ -2342,11 +2318,20 @@ end
 local function getNearestChest(myRoot)
 	local nearestPart, shortestDist = nil, math.huge
 	pcall(function()
-		for _, obj in ipairs(Workspace:GetDescendants()) do
+		for _, obj in ipairs(Workspace:GetChildren()) do
 			if isValidChestPart(obj) then
 				local dist = (myRoot.Position - obj.Position).Magnitude
 				if dist < shortestDist then
 					shortestDist, nearestPart = dist, obj
+				end
+			elseif obj:IsA("Model") or obj:IsA("Folder") then
+				for _, child in ipairs(obj:GetChildren()) do
+					if isValidChestPart(child) then
+						local dist = (myRoot.Position - child.Position).Magnitude
+						if dist < shortestDist then
+							shortestDist, nearestPart = dist, child
+						end
+					end
 				end
 			end
 		end
@@ -2356,21 +2341,21 @@ end
 
 task.spawn(function()
 	while ScriptRunning do
-		task.wait(0.12)
+		task.wait(0.15)
 		if AutoAttackSeaEnabled then
 			pcall(function()
 				local myChar = LocalPlayer.Character
 				local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-				if myRoot then
-					for model, esp in pairs(TrackedNPCs) do
-						if model and model.Parent and esp and esp.Root and esp.Humanoid and esp.Humanoid.Health > 0 then
-							if isSeaEvent(model.Name) then
-								local dist = (myRoot.Position - esp.Root.Position).Magnitude
-								if dist < 250 then
-									equipBestCombatTool()
-									triggerHit(myChar)
-									break
-								end
+				local enemiesFolder = Workspace:FindFirstChild("Enemies")
+				if myRoot and enemiesFolder then
+					for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+						if enemy:IsA("Model") and isSeaEvent(enemy.Name) then
+							local eRoot = enemy:FindFirstChild("HumanoidRootPart")
+							local eHum = enemy:FindFirstChildOfClass("Humanoid")
+							if eRoot and eHum and eHum.Health > 0 and (myRoot.Position - eRoot.Position).Magnitude < 250 then
+								equipBestCombatTool()
+								triggerHit(myChar)
+								break
 							end
 						end
 					end
@@ -2382,7 +2367,7 @@ end)
 
 task.spawn(function()
 	while ScriptRunning do
-		task.wait(0.12)
+		task.wait(0.15)
 		if AutoChestEnabled then
 			pcall(function()
 				local char = LocalPlayer.Character
@@ -2407,7 +2392,7 @@ task.spawn(function()
 						task.wait(0.18)
 					end
 				else
-					StatusLabel.Text = "●  Auto Chest: Scanning Entire Map..."
+					StatusLabel.Text = "●  Auto Chest: Scanning..."
 					StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
 				end
 			end)
@@ -2417,7 +2402,7 @@ end)
 
 task.spawn(function()
 	while ScriptRunning do
-		task.wait(0.05)
+		task.wait(0.08)
 		pcall(function()
 			local char = LocalPlayer.Character
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -2459,10 +2444,6 @@ RunService.Stepped:Connect(function()
 		return
 	end
 	pcall(function()
-		if RemoveFogEnabled then
-			clearSeaFog()
-		end
-
 		local char = LocalPlayer.Character
 		if not char then
 			return
@@ -2493,7 +2474,7 @@ RunService.Stepped:Connect(function()
 		end
 
 		if noclipActive then
-			for _, part in ipairs(char:GetDescendants()) do
+			for _, part in ipairs(char:GetChildren()) do
 				if part:IsA("BasePart") and part.CanCollide then
 					part.CanCollide = false
 				end
@@ -2640,57 +2621,17 @@ if Drawing then
 	Players.PlayerAdded:Connect(addPlayer)
 	Players.PlayerRemoving:Connect(removePlayer)
 
-	local function scanFolder(folder)
-		pcall(function()
-			for _, obj in ipairs(folder:GetChildren()) do
-				if isPickupableFruitInstance(obj) then
-					addFruit(obj)
-				end
-				if obj:IsA("Model") then
-					addNPC(obj)
-					if isValidChestPart(obj.PrimaryPart) then
-						addChest(obj.PrimaryPart)
-					end
-					for _, desc in ipairs(obj:GetDescendants()) do
-						if isValidChestPart(desc) then
-							addChest(desc)
-						end
-						if isPickupableFruitInstance(desc) then
-							addFruit(desc)
-						end
-					end
-				elseif obj:IsA("BasePart") then
-					if isValidChestPart(obj) then
-						addChest(obj)
-					end
-				elseif obj:IsA("Folder") then
-					scanFolder(obj)
-				end
-			end
+	local enemiesFolder = Workspace:FindFirstChild("Enemies")
+	if enemiesFolder then
+		for _, m in ipairs(enemiesFolder:GetChildren()) do
+			addNPC(m)
+		end
+		enemiesFolder.ChildAdded:Connect(function(m)
+			task.wait(0.15)
+			addNPC(m)
 		end)
+		enemiesFolder.ChildRemoved:Connect(removeNPC)
 	end
-	scanFolder(Workspace)
-	Workspace.DescendantAdded:Connect(function(obj)
-		pcall(function()
-			if obj:IsA("Model") then
-				task.wait(0.2)
-				addNPC(obj)
-				if isPickupableFruitInstance(obj) then
-					addFruit(obj)
-				end
-			elseif obj:IsA("BasePart") then
-				task.wait(0.1)
-				if isValidChestPart(obj) then
-					addChest(obj)
-				elseif isPickupableFruitInstance(obj) then
-					addFruit(obj)
-				end
-			elseif obj:IsA("Tool") and isPickupableFruitInstance(obj) then
-				task.wait(0.1)
-				addFruit(obj)
-			end
-		end)
-	end)
 
 	RunService.RenderStepped:Connect(function()
 		if not ScriptRunning then
@@ -2777,46 +2718,6 @@ if Drawing then
 						local dist = myRoot and math.floor((myRoot.Position - esp.Root.Position).Magnitude) or 0
 						local tag = esp.IsSeaEvent and "[SEA EVENT] " or "[NPC] "
 						esp.Text.Text = tag .. model.Name .. " [" .. dist .. "m]"
-						esp.Text.Position = Vector2.new(pos.X, pos.Y)
-						esp.Text.Visible = true
-					else
-						esp.Text.Visible = false
-					end
-				end
-			end
-
-			for part, esp in pairs(TrackedChests) do
-				if not isValidChestPart(part) then
-					removeChest(part)
-				elseif not ChestESPEnabled or not esp.Text then
-					if esp.Text then
-						esp.Text.Visible = false
-					end
-				else
-					local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
-					if onScreen then
-						local dist = myRoot and math.floor((myRoot.Position - part.Position).Magnitude) or 0
-						esp.Text.Text = "[CHEST] " .. tostring(esp.Label) .. " [" .. dist .. "m]"
-						esp.Text.Position = Vector2.new(pos.X, pos.Y)
-						esp.Text.Visible = true
-					else
-						esp.Text.Visible = false
-					end
-				end
-			end
-
-			for obj, esp in pairs(TrackedFruits) do
-				if not obj.Parent or not esp.Part or not esp.Part.Parent or not isPickupableFruitInstance(obj) then
-					removeFruit(obj)
-				elseif not FruitESPEnabled or not esp.Text then
-					if esp.Text then
-						esp.Text.Visible = false
-					end
-				else
-					local pos, onScreen = Camera:WorldToViewportPoint(esp.Part.Position)
-					if onScreen then
-						local dist = myRoot and math.floor((myRoot.Position - esp.Part.Position).Magnitude) or 0
-						esp.Text.Text = "[FRUIT] " .. tostring(esp.Label) .. " [" .. dist .. "m]"
 						esp.Text.Position = Vector2.new(pos.X, pos.Y)
 						esp.Text.Visible = true
 					else
