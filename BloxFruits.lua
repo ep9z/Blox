@@ -142,7 +142,7 @@ local EnemyLevelBrackets = {
 	{minLvl = 1250, maxLvl = 1274, keywords = {"ship deckhand"}, questText = "Ship Deckhand"},
 	{minLvl = 1275, maxLvl = 1299, keywords = {"ship engineer"}, questText = "Ship Engineer"},
 	{minLvl = 1300, maxLvl = 1324, keywords = {"ship steward"}, questText = "Ship Steward"},
-	{minLvl = 1325, maxLvl = 1349, keywords = "Ship Officer"},
+	{minLvl = 1325, maxLvl = 1349, keywords = {"ship officer"}, questText = "Ship Officer"},
 	{minLvl = 1350, maxLvl = 1374, keywords = {"arctic warrior"}, questText = "Arctic Warrior"},
 	{minLvl = 1375, maxLvl = 1424, keywords = {"snow lurker"}, questText = "Snow Lurker"},
 	{minLvl = 1425, maxLvl = 1449, keywords = {"sea soldier"}, questText = "Sea Soldier"},
@@ -190,7 +190,6 @@ local EnemyLevelBrackets = {
 	{minLvl = 2700, maxLvl = 2724, keywords = {"high disciple"}, questText = "High Disciple"},
 	{minLvl = 2725, maxLvl = 9999, keywords = {"high disciple"}, questText = "High Disciple"}
 }
-EnemyLevelBrackets[44] = {minLvl = 1325, maxLvl = 1349, keywords = {"ship officer"}, questText = "Ship Officer"}
 
 local AllowedChestNames = {
 	"GoldChest",
