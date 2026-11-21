@@ -77,7 +77,7 @@ local AimBotEnabled = false
 local PvPSpeed = 340
 local SelectedPvPPlayer = nil
 local FlySpeed = 320
-local BringRadius = 280
+local BringRadius = 320
 local CurrentTween = nil
 local ActiveTweenOwner = nil
 local ScriptRunning = true
@@ -100,110 +100,198 @@ local HydraIslandFallbackPos = Vector3.new(5750, 610, -280)
 local HauntedCastleFallbackPos = Vector3.new(-9500, 145, 6080)
 
 local FightingStylesList = {
-	{name = "Dark Step", argsList = {{"BuyBlackLeg"}}, toolKeywords = {"dark step", "black leg"}},
-	{name = "Electric", argsList = {{"BuyElectro"}}, toolKeywords = {"electric", "electro"}},
-	{name = "Water Kung Fu", argsList = {{"BuyFishmanKarate"}}, toolKeywords = {"water kung", "fishman karate"}},
-	{name = "Dragon Breath", argsList = {{"BlackbeardReward", "DragonClaw", "1"}, {"BlackbeardReward", "DragonClaw", "2"}, {"BuyDragonClaw"}}, toolKeywords = {"dragon breath", "dragon claw"}},
-	{name = "Superhuman", argsList = {{"BuySuperhuman"}}, toolKeywords = {"superhuman"}},
-	{name = "Death Step", argsList = {{"BuyDeathStep"}}, toolKeywords = {"death step"}},
-	{name = "Sharkman Karate", argsList = {{"BuySharkmanKarate"}}, toolKeywords = {"sharkman karate", "sharkman"}},
-	{name = "Electric Claw", argsList = {{"BuyElectricClaw"}}, toolKeywords = {"electric claw"}},
-	{name = "Dragon Talon", argsList = {{"BuyDragonTalon"}}, toolKeywords = {"dragon talon"}},
-	{name = "Godhuman", argsList = {{"BuyGodhuman"}}, toolKeywords = {"godhuman"}},
-	{name = "Sanguine Art", argsList = {{"BuySanguineArt"}}, toolKeywords = {"sanguine art", "sanguine"}}
+	{
+		name = "Dark Step",
+		calls = {
+			{"BuyBlackLeg"},
+			{"BuyBlackLeg", "Progress"},
+			{"BuyBlackLeg", "Check"}
+		},
+		toolKeywords = {"dark step", "black leg", "step"}
+	},
+	{
+		name = "Electric",
+		calls = {
+			{"BuyElectro"},
+			{"BuyElectro", "Progress"},
+			{"BuyElectro", "Check"}
+		},
+		toolKeywords = {"electric", "electro"}
+	},
+	{
+		name = "Water Kung Fu",
+		calls = {
+			{"BuyFishmanKarate"},
+			{"BuyFishmanKarate", "Progress"},
+			{"BuyFishmanKarate", "Check"}
+		},
+		toolKeywords = {"water kung", "fishman karate", "water kung fu"}
+	},
+	{
+		name = "Dragon Breath",
+		calls = {
+			{"BlackbeardReward", "DragonClaw", "1"},
+			{"BlackbeardReward", "DragonClaw", "2"},
+			{"BuyDragonClaw"}
+		},
+		toolKeywords = {"dragon breath", "dragon claw"}
+	},
+	{
+		name = "Superhuman",
+		calls = {
+			{"BuySuperhuman"},
+			{"BuySuperhuman", "Progress"},
+			{"BuySuperhuman", "Check"}
+		},
+		toolKeywords = {"superhuman"}
+	},
+	{
+		name = "Death Step",
+		calls = {
+			{"BuyDeathStep"},
+			{"BuyDeathStep", "Progress"},
+			{"BuyDeathStep", "Check"}
+		},
+		toolKeywords = {"death step"}
+	},
+	{
+		name = "Sharkman Karate",
+		calls = {
+			{"BuySharkmanKarate"},
+			{"BuySharkmanKarate", "Progress"},
+			{"BuySharkmanKarate", "Check"}
+		},
+		toolKeywords = {"sharkman karate", "sharkman"}
+	},
+	{
+		name = "Electric Claw",
+		calls = {
+			{"BuyElectricClaw"},
+			{"BuyElectricClaw", "Progress"},
+			{"BuyElectricClaw", "Check"}
+		},
+		toolKeywords = {"electric claw"}
+	},
+	{
+		name = "Dragon Talon",
+		calls = {
+			{"BuyDragonTalon"},
+			{"BuyDragonTalon", "Progress"},
+			{"BuyDragonTalon", "Check"}
+		},
+		toolKeywords = {"dragon talon"}
+	},
+	{
+		name = "Godhuman",
+		calls = {
+			{"BuyGodhuman"},
+			{"BuyGodhuman", "Progress"},
+			{"BuyGodhuman", "Check"}
+		},
+		toolKeywords = {"godhuman"}
+	},
+	{
+		name = "Sanguine Art",
+		calls = {
+			{"BuySanguineArt"},
+			{"BuySanguineArt", "Progress"},
+			{"BuySanguineArt", "Check"}
+		},
+		toolKeywords = {"sanguine art", "sanguine"}
+	}
 }
 
 local EnemyLevelBrackets = {
-	{minLvl = 1, maxLvl = 9, keywords = {"bandit"}, questText = "Bandit"},
-	{minLvl = 10, maxLvl = 14, keywords = {"monkey"}, questText = "Monkey"},
-	{minLvl = 15, maxLvl = 29, keywords = {"gorilla"}, questText = "Gorilla"},
-	{minLvl = 30, maxLvl = 39, keywords = {"pirate"}, questText = "Pirate"},
-	{minLvl = 40, maxLvl = 59, keywords = {"brute"}, questText = "Brute"},
-	{minLvl = 60, maxLvl = 74, keywords = {"desert bandit"}, questText = "Desert Bandit"},
-	{minLvl = 75, maxLvl = 89, keywords = {"desert officer"}, questText = "Desert Officer"},
-	{minLvl = 90, maxLvl = 99, keywords = {"snow bandit"}, questText = "Snow Bandit"},
-	{minLvl = 100, maxLvl = 119, keywords = {"snowman"}, questText = "Snowman"},
-	{minLvl = 120, maxLvl = 149, keywords = {"chief petty officer"}, questText = "Chief Petty Officer"},
-	{minLvl = 150, maxLvl = 174, keywords = {"sky bandit"}, questText = "Sky Bandit"},
-	{minLvl = 175, maxLvl = 189, keywords = {"dark master"}, questText = "Dark Master"},
-	{minLvl = 190, maxLvl = 209, keywords = {"prisoner"}, questText = "Prisoner"},
-	{minLvl = 210, maxLvl = 249, keywords = {"dangerous prisoner"}, questText = "Dangerous Prisoner"},
-	{minLvl = 250, maxLvl = 274, keywords = {"toga warrior"}, questText = "Toga Warrior"},
-	{minLvl = 275, maxLvl = 299, keywords = {"gladiator"}, questText = "Gladiator"},
-	{minLvl = 300, maxLvl = 324, keywords = {"military soldier"}, questText = "Military Soldier"},
-	{minLvl = 325, maxLvl = 374, keywords = {"military spy"}, questText = "Military Spy"},
-	{minLvl = 375, maxLvl = 399, keywords = {"fishman warrior"}, questText = "Fishman Warrior"},
-	{minLvl = 400, maxLvl = 449, keywords = {"fishman commando"}, questText = "Fishman Commando"},
-	{minLvl = 450, maxLvl = 474, keywords = {"god's guard", "gods guard"}, questText = "God's Guard"},
-	{minLvl = 475, maxLvl = 524, keywords = {"shanda"}, questText = "Shanda"},
-	{minLvl = 525, maxLvl = 549, keywords = {"royal squad"}, questText = "Royal Squad"},
-	{minLvl = 550, maxLvl = 624, keywords = {"royal soldier"}, questText = "Royal Soldier"},
-	{minLvl = 625, maxLvl = 649, keywords = {"galley pirate"}, questText = "Galley Pirate"},
-	{minLvl = 650, maxLvl = 699, keywords = {"galley captain"}, questText = "Galley Captain"},
-	{minLvl = 700, maxLvl = 724, keywords = {"raider"}, questText = "Raider"},
-	{minLvl = 725, maxLvl = 774, keywords = {"mercenary"}, questText = "Mercenary"},
-	{minLvl = 775, maxLvl = 799, keywords = {"swan pirate"}, questText = "Swan Pirate"},
-	{minLvl = 800, maxLvl = 874, keywords = {"factory staff"}, questText = "Factory Staff"},
-	{minLvl = 875, maxLvl = 899, keywords = {"marine lieutenant"}, questText = "Marine Lieutenant"},
-	{minLvl = 900, maxLvl = 949, keywords = {"marine captain"}, questText = "Marine Captain"},
-	{minLvl = 950, maxLvl = 974, keywords = {"zombie"}, questText = "Zombie"},
-	{minLvl = 975, maxLvl = 999, keywords = {"vampire"}, questText = "Vampire"},
-	{minLvl = 1000, maxLvl = 1049, keywords = {"snow trooper"}, questText = "Snow Trooper"},
-	{minLvl = 1050, maxLvl = 1099, keywords = {"winter warrior"}, questText = "Winter Warrior"},
-	{minLvl = 1100, maxLvl = 1124, keywords = {"lab subordinate"}, questText = "Lab Subordinate"},
-	{minLvl = 1125, maxLvl = 1174, keywords = {"horn warrior"}, questText = "Horn Warrior"},
-	{minLvl = 1175, maxLvl = 1199, keywords = {"magma ninja"}, questText = "Magma Ninja"},
-	{minLvl = 1200, maxLvl = 1249, keywords = {"lava pirate"}, questText = "Lava Pirate"},
-	{minLvl = 1250, maxLvl = 1274, keywords = {"ship deckhand"}, questText = "Ship Deckhand"},
-	{minLvl = 1275, maxLvl = 1299, keywords = {"ship engineer"}, questText = "Ship Engineer"},
-	{minLvl = 1300, maxLvl = 1324, keywords = {"ship steward"}, questText = "Ship Steward"},
-	{minLvl = 1325, maxLvl = 1349, keywords = {"ship officer"}, questText = "Ship Officer"},
-	{minLvl = 1350, maxLvl = 1374, keywords = {"arctic warrior"}, questText = "Arctic Warrior"},
-	{minLvl = 1375, maxLvl = 1424, keywords = {"snow lurker"}, questText = "Snow Lurker"},
-	{minLvl = 1425, maxLvl = 1449, keywords = {"sea soldier"}, questText = "Sea Soldier"},
-	{minLvl = 1450, maxLvl = 1474, keywords = {"water fighter"}, questText = "Water Fighter"},
-	{minLvl = 1475, maxLvl = 1499, keywords = {"pirate millionaire"}, questText = "Pirate Millionaire"},
-	{minLvl = 1500, maxLvl = 1524, keywords = {"pistol billionaire"}, questText = "Pistol Billionaire"},
-	{minLvl = 1525, maxLvl = 1574, keywords = {"dragon crew warrior"}, questText = "Dragon Crew Warrior"},
-	{minLvl = 1575, maxLvl = 1599, keywords = {"dragon crew archer"}, questText = "Dragon Crew Archer"},
-	{minLvl = 1600, maxLvl = 1624, keywords = {"female island"}, questText = "Female Island"},
-	{minLvl = 1625, maxLvl = 1649, keywords = {"giant sky island"}, questText = "Giant Sky Island"},
-	{minLvl = 1650, maxLvl = 1699, keywords = {"head baker"}, questText = "Head Baker"},
-	{minLvl = 1700, maxLvl = 1724, keywords = {"baking staff"}, questText = "Baking Staff"},
-	{minLvl = 1725, maxLvl = 1749, keywords = {"cake guard"}, questText = "Cake Guard"},
-	{minLvl = 1750, maxLvl = 1774, keywords = {"cookie crafter"}, questText = "Cookie Crafter"},
-	{minLvl = 1775, maxLvl = 1799, keywords = {"cake queen"}, questText = "Cake Queen"},
-	{minLvl = 1800, maxLvl = 1824, keywords = {"peanut president"}, questText = "Peanut President"},
-	{minLvl = 1825, maxLvl = 1849, keywords = {"ice cream chef"}, questText = "Ice Cream Chef"},
-	{minLvl = 1850, maxLvl = 1899, keywords = {"ice cream commander"}, questText = "Ice Cream Commander"},
-	{minLvl = 1900, maxLvl = 1924, keywords = {"cookie disciple"}, questText = "Cookie Disciple"},
-	{minLvl = 1925, maxLvl = 1974, keywords = {"mint mark"}, questText = "Mint Mark"},
-	{minLvl = 1975, maxLvl = 1999, keywords = {"cocoa warrior"}, questText = "Cocoa Warrior"},
-	{minLvl = 2000, maxLvl = 2024, keywords = {"chocolate bar battler"}, questText = "Chocolate Bar Battler"},
-	{minLvl = 2025, maxLvl = 2049, keywords = {"sweet thief"}, questText = "Sweet Thief"},
-	{minLvl = 2050, maxLvl = 2074, keywords = {"candy rebel"}, questText = "Candy Rebel"},
-	{minLvl = 2075, maxLvl = 2099, keywords = {"candy pirate"}, questText = "Candy Pirate"},
-	{minLvl = 2100, maxLvl = 2124, keywords = {"snow demon"}, questText = "Snow Demon"},
-	{minLvl = 2125, maxLvl = 2149, keywords = {"isle outcast"}, questText = "Isle Outcast"},
-	{minLvl = 2150, maxLvl = 2199, keywords = {"island boy"}, questText = "Island Boy"},
-	{minLvl = 2200, maxLvl = 2224, keywords = {"sun-kissed warrior"}, questText = "Sun-kissed Warrior"},
-	{minLvl = 2225, maxLvl = 2249, keywords = {"isle champion"}, questText = "Isle Champion"},
-	{minLvl = 2250, maxLvl = 2274, keywords = {"serpent hunter"}, questText = "Serpent Hunter"},
-	{minLvl = 2275, maxLvl = 2299, keywords = {"skull slayer"}, questText = "Skull Slayer"},
-	{minLvl = 2300, maxLvl = 2349, keywords = {"reborn skeleton"}, questText = "Reborn Skeleton"},
-	{minLvl = 2350, maxLvl = 2399, keywords = {"living zombie"}, questText = "Living Zombie"},
-	{minLvl = 2400, maxLvl = 2449, keywords = {"demonic soul"}, questText = "Demonic Soul"},
-	{minLvl = 2450, maxLvl = 2474, keywords = {"posessed mummy", "possessed mummy"}, questText = "Possessed Mummy"},
-	{minLvl = 2475, maxLvl = 2524, keywords = {"peanut scout"}, questText = "Peanut Scout"},
-	{minLvl = 2525, maxLvl = 2549, keywords = {"dragon crew"}, questText = "Dragon Crew"},
-	{minLvl = 2550, maxLvl = 2574, keywords = {"hydra enforcer"}, questText = "Hydra Enforcer"},
-	{minLvl = 2575, maxLvl = 2599, keywords = {"venous knight"}, questText = "Venous Knight"},
-	{minLvl = 2600, maxLvl = 2624, keywords = {"marine commodore"}, questText = "Marine Commodore"},
-	{minLvl = 2625, maxLvl = 2649, keywords = {"marine rear admiral"}, questText = "Marine Rear Admiral"},
-	{minLvl = 2650, maxLvl = 2674, keywords = {"fishman raider"}, questText = "Fishman Raider"},
-	{minLvl = 2675, maxLvl = 2699, keywords = {"fishman captain"}, questText = "Fishman Captain"},
-	{minLvl = 2700, maxLvl = 2724, keywords = {"high disciple"}, questText = "High Disciple"},
-	{minLvl = 2725, maxLvl = 9999, keywords = {"high disciple"}, questText = "High Disciple"}
+	{minLvl = 1, maxLvl = 9, keywords = {"bandit"}, questText = "Bandit", questName = "BanditQuest1", questNum = 1},
+	{minLvl = 10, maxLvl = 14, keywords = {"monkey"}, questText = "Monkey", questName = "JungleQuest", questNum = 1},
+	{minLvl = 15, maxLvl = 29, keywords = {"gorilla"}, questText = "Gorilla", questName = "JungleQuest", questNum = 2},
+	{minLvl = 30, maxLvl = 39, keywords = {"pirate"}, questText = "Pirate", questName = "BuggyQuest1", questNum = 1},
+	{minLvl = 40, maxLvl = 59, keywords = {"brute"}, questText = "Brute", questName = "BuggyQuest1", questNum = 2},
+	{minLvl = 60, maxLvl = 74, keywords = {"desert bandit"}, questText = "Desert Bandit", questName = "DesertQuest", questNum = 1},
+	{minLvl = 75, maxLvl = 89, keywords = {"desert officer"}, questText = "Desert Officer", questName = "DesertQuest", questNum = 2},
+	{minLvl = 90, maxLvl = 99, keywords = {"snow bandit"}, questText = "Snow Bandit", questName = "SnowQuest", questNum = 1},
+	{minLvl = 100, maxLvl = 119, keywords = {"snowman"}, questText = "Snowman", questName = "SnowQuest", questNum = 2},
+	{minLvl = 120, maxLvl = 149, keywords = {"chief petty officer"}, questText = "Chief Petty Officer", questName = "MarineQuest2", questNum = 1},
+	{minLvl = 150, maxLvl = 174, keywords = {"sky bandit"}, questText = "Sky Bandit", questName = "SkyQuest", questNum = 1},
+	{minLvl = 175, maxLvl = 189, keywords = {"dark master"}, questText = "Dark Master", questName = "SkyQuest", questNum = 2},
+	{minLvl = 190, maxLvl = 209, keywords = {"prisoner"}, questText = "Prisoner", questName = "PrisonerQuest", questNum = 1},
+	{minLvl = 210, maxLvl = 249, keywords = {"dangerous prisoner"}, questText = "Dangerous Prisoner", questName = "PrisonerQuest", questNum = 2},
+	{minLvl = 250, maxLvl = 274, keywords = {"toga warrior"}, questText = "Toga Warrior", questName = "ColosseumQuest", questNum = 1},
+	{minLvl = 275, maxLvl = 299, keywords = {"gladiator"}, questText = "Gladiator", questName = "ColosseumQuest", questNum = 2},
+	{minLvl = 300, maxLvl = 324, keywords = {"military soldier"}, questText = "Military Soldier", questName = "MagmaQuest", questNum = 1},
+	{minLvl = 325, maxLvl = 374, keywords = {"military spy"}, questText = "Military Spy", questName = "MagmaQuest", questNum = 2},
+	{minLvl = 375, maxLvl = 399, keywords = {"fishman warrior"}, questText = "Fishman Warrior", questName = "FishmanQuest", questNum = 1},
+	{minLvl = 400, maxLvl = 449, keywords = {"fishman commando"}, questText = "Fishman Commando", questName = "FishmanQuest", questNum = 2},
+	{minLvl = 450, maxLvl = 474, keywords = {"god's guard", "gods guard"}, questText = "God's Guard", questName = "SkyExp1Quest", questNum = 1},
+	{minLvl = 475, maxLvl = 524, keywords = {"shanda"}, questText = "Shanda", questName = "SkyExp1Quest", questNum = 2},
+	{minLvl = 525, maxLvl = 549, keywords = {"royal squad"}, questText = "Royal Squad", questName = "SkyExp2Quest", questNum = 1},
+	{minLvl = 550, maxLvl = 624, keywords = {"royal soldier"}, questText = "Royal Soldier", questName = "SkyExp2Quest", questNum = 2},
+	{minLvl = 625, maxLvl = 649, keywords = {"galley pirate"}, questText = "Galley Pirate", questName = "FountainQuest", questNum = 1},
+	{minLvl = 650, maxLvl = 699, keywords = {"galley captain"}, questText = "Galley Captain", questName = "FountainQuest", questNum = 2},
+	{minLvl = 700, maxLvl = 724, keywords = {"raider"}, questText = "Raider", questName = "Area1Quest", questNum = 1},
+	{minLvl = 725, maxLvl = 774, keywords = {"mercenary"}, questText = "Mercenary", questName = "Area1Quest", questNum = 2},
+	{minLvl = 775, maxLvl = 799, keywords = {"swan pirate"}, questText = "Swan Pirate", questName = "Area2Quest", questNum = 1},
+	{minLvl = 800, maxLvl = 874, keywords = {"factory staff"}, questText = "Factory Staff", questName = "Area2Quest", questNum = 2},
+	{minLvl = 875, maxLvl = 899, keywords = {"marine lieutenant"}, questText = "Marine Lieutenant", questName = "MarineQuest3", questNum = 1},
+	{minLvl = 900, maxLvl = 949, keywords = {"marine captain"}, questText = "Marine Captain", questName = "MarineQuest3", questNum = 2},
+	{minLvl = 950, maxLvl = 974, keywords = {"zombie"}, questText = "Zombie", questName = "ZombieQuest", questNum = 1},
+	{minLvl = 975, maxLvl = 999, keywords = {"vampire"}, questText = "Vampire", questName = "ZombieQuest", questNum = 2},
+	{minLvl = 1000, maxLvl = 1049, keywords = {"snow trooper"}, questText = "Snow Trooper", questName = "SnowMountainQuest", questNum = 1},
+	{minLvl = 1050, maxLvl = 1099, keywords = {"winter warrior"}, questText = "Winter Warrior", questName = "SnowMountainQuest", questNum = 2},
+	{minLvl = 1100, maxLvl = 1124, keywords = {"lab subordinate"}, questText = "Lab Subordinate", questName = "IceSideQuest", questNum = 1},
+	{minLvl = 1125, maxLvl = 1174, keywords = {"horn warrior"}, questText = "Horn Warrior", questName = "IceSideQuest", questNum = 2},
+	{minLvl = 1175, maxLvl = 1199, keywords = {"magma ninja"}, questText = "Magma Ninja", questName = "FireSideQuest", questNum = 1},
+	{minLvl = 1200, maxLvl = 1249, keywords = {"lava pirate"}, questText = "Lava Pirate", questName = "FireSideQuest", questNum = 2},
+	{minLvl = 1250, maxLvl = 1274, keywords = {"ship deckhand"}, questText = "Ship Deckhand", questName = "ShipQuest1", questNum = 1},
+	{minLvl = 1275, maxLvl = 1299, keywords = {"ship engineer"}, questText = "Ship Engineer", questName = "ShipQuest1", questNum = 2},
+	{minLvl = 1300, maxLvl = 1324, keywords = {"ship steward"}, questText = "Ship Steward", questName = "ShipQuest2", questNum = 1},
+	{minLvl = 1325, maxLvl = 1349, keywords = {"ship officer"}, questText = "Ship Officer", questName = "ShipQuest2", questNum = 2},
+	{minLvl = 1350, maxLvl = 1374, keywords = {"arctic warrior"}, questText = "Arctic Warrior", questName = "FrostQuest", questNum = 1},
+	{minLvl = 1375, maxLvl = 1424, keywords = {"snow lurker"}, questText = "Snow Lurker", questName = "FrostQuest", questNum = 2},
+	{minLvl = 1425, maxLvl = 1449, keywords = {"sea soldier"}, questText = "Sea Soldier", questName = "ForgottenQuest", questNum = 1},
+	{minLvl = 1450, maxLvl = 1474, keywords = {"water fighter"}, questText = "Water Fighter", questName = "ForgottenQuest", questNum = 2},
+	{minLvl = 1475, maxLvl = 1499, keywords = {"pirate millionaire"}, questText = "Pirate Millionaire", questName = "PiratePortQuest", questNum = 1},
+	{minLvl = 1500, maxLvl = 1524, keywords = {"pistol billionaire"}, questText = "Pistol Billionaire", questName = "PiratePortQuest", questNum = 2},
+	{minLvl = 1525, maxLvl = 1574, keywords = {"dragon crew warrior"}, questText = "Dragon Crew Warrior", questName = "AmazonQuest", questNum = 1},
+	{minLvl = 1575, maxLvl = 1599, keywords = {"dragon crew archer"}, questText = "Dragon Crew Archer", questName = "AmazonQuest", questNum = 2},
+	{minLvl = 1600, maxLvl = 1624, keywords = {"female island"}, questText = "Female Island", questName = "AmazonQuest2", questNum = 1},
+	{minLvl = 1625, maxLvl = 1649, keywords = {"giant sky island"}, questText = "Giant Sky Island", questName = "AmazonQuest2", questNum = 2},
+	{minLvl = 1650, maxLvl = 1699, keywords = {"head baker"}, questText = "Head Baker", questName = "CakeQuest1", questNum = 1},
+	{minLvl = 1700, maxLvl = 1724, keywords = {"baking staff"}, questText = "Baking Staff", questName = "CakeQuest1", questNum = 2},
+	{minLvl = 1725, maxLvl = 1749, keywords = {"cake guard"}, questText = "Cake Guard", questName = "CakeQuest2", questNum = 1},
+	{minLvl = 1750, maxLvl = 1774, keywords = {"cookie crafter"}, questText = "Cookie Crafter", questName = "CakeQuest2", questNum = 2},
+	{minLvl = 1775, maxLvl = 1799, keywords = {"cake queen"}, questText = "Cake Queen", questName = "CakeQuest2", questNum = 2},
+	{minLvl = 1800, maxLvl = 1824, keywords = {"peanut president"}, questText = "Peanut President", questName = "ChocQuest1", questNum = 1},
+	{minLvl = 1825, maxLvl = 1849, keywords = {"ice cream chef"}, questText = "Ice Cream Chef", questName = "ChocQuest1", questNum = 2},
+	{minLvl = 1850, maxLvl = 1899, keywords = {"ice cream commander"}, questText = "Ice Cream Commander", questName = "ChocQuest2", questNum = 1},
+	{minLvl = 1900, maxLvl = 1924, keywords = {"cookie disciple"}, questText = "Cookie Disciple", questName = "ChocQuest2", questNum = 2},
+	{minLvl = 1925, maxLvl = 1974, keywords = {"mint mark"}, questText = "Mint Mark", questName = "CandyQuest1", questNum = 1},
+	{minLvl = 1975, maxLvl = 1999, keywords = {"cocoa warrior"}, questText = "Cocoa Warrior", questName = "CandyQuest1", questNum = 2},
+	{minLvl = 2000, maxLvl = 2024, keywords = {"chocolate bar battler"}, questText = "Chocolate Bar Battler", questName = "CandyQuest2", questNum = 1},
+	{minLvl = 2025, maxLvl = 2049, keywords = {"sweet thief"}, questText = "Sweet Thief", questName = "CandyQuest2", questNum = 2},
+	{minLvl = 2050, maxLvl = 2074, keywords = {"candy rebel"}, questText = "Candy Rebel", questName = "TikiQuest1", questNum = 1},
+	{minLvl = 2075, maxLvl = 2099, keywords = {"candy pirate"}, questText = "Candy Pirate", questName = "TikiQuest1", questNum = 2},
+	{minLvl = 2100, maxLvl = 2124, keywords = {"snow demon"}, questText = "Snow Demon", questName = "TikiQuest1", questNum = 2},
+	{minLvl = 2125, maxLvl = 2149, keywords = {"isle outcast"}, questText = "Isle Outcast", questName = "TikiQuest2", questNum = 1},
+	{minLvl = 2150, maxLvl = 2199, keywords = {"island boy"}, questText = "Island Boy", questName = "TikiQuest2", questNum = 2},
+	{minLvl = 2200, maxLvl = 2224, keywords = {"sun-kissed warrior"}, questText = "Sun-kissed Warrior", questName = "TikiQuest2", questNum = 2},
+	{minLvl = 2225, maxLvl = 2249, keywords = {"isle champion"}, questText = "Isle Champion", questName = "TikiQuest3", questNum = 1},
+	{minLvl = 2250, maxLvl = 2274, keywords = {"serpent hunter"}, questText = "Serpent Hunter", questName = "TikiQuest3", questNum = 2},
+	{minLvl = 2275, maxLvl = 2299, keywords = {"skull slayer"}, questText = "Skull Slayer", questName = "HauntedQuest1", questNum = 1},
+	{minLvl = 2300, maxLvl = 2349, keywords = {"reborn skeleton"}, questText = "Reborn Skeleton", questName = "HauntedQuest1", questNum = 2},
+	{minLvl = 2350, maxLvl = 2399, keywords = {"living zombie"}, questText = "Living Zombie", questName = "HauntedQuest2", questNum = 1},
+	{minLvl = 2400, maxLvl = 2449, keywords = {"demonic soul"}, questText = "Demonic Soul", questName = "HauntedQuest2", questNum = 2},
+	{minLvl = 2450, maxLvl = 2474, keywords = {"posessed mummy", "possessed mummy"}, questText = "Possessed Mummy", questName = "HauntedQuest2", questNum = 2},
+	{minLvl = 2475, maxLvl = 2524, keywords = {"peanut scout"}, questText = "Peanut Scout", questName = "NutsQuest", questNum = 1},
+	{minLvl = 2525, maxLvl = 2549, keywords = {"dragon crew"}, questText = "Dragon Crew", questName = "NutsQuest", questNum = 2},
+	{minLvl = 2550, maxLvl = 2574, keywords = {"hydra enforcer"}, questText = "Hydra Enforcer", questName = "HydraQuest", questNum = 1},
+	{minLvl = 2575, maxLvl = 2599, keywords = {"venous knight"}, questText = "Venous Knight", questName = "HydraQuest", questNum = 2},
+	{minLvl = 2600, maxLvl = 2624, keywords = {"marine commodore"}, questText = "Marine Commodore", questName = "MarineTreeQuest", questNum = 1},
+	{minLvl = 2625, maxLvl = 2649, keywords = {"marine rear admiral"}, questText = "Marine Rear Admiral", questName = "MarineTreeQuest", questNum = 2},
+	{minLvl = 2650, maxLvl = 2674, keywords = {"fishman raider"}, questText = "Fishman Raider", questName = "DeepForestQuest", questNum = 1},
+	{minLvl = 2675, maxLvl = 2699, keywords = {"fishman captain"}, questText = "Fishman Captain", questName = "DeepForestQuest", questNum = 2},
+	{minLvl = 2700, maxLvl = 2724, keywords = {"high disciple"}, questText = "High Disciple", questName = "DeepForestQuest", questNum = 2},
+	{minLvl = 2725, maxLvl = 9999, keywords = {"high disciple"}, questText = "High Disciple", questName = "DeepForestQuest", questNum = 2}
 }
 
 local AllowedChestNames = {
@@ -640,6 +728,7 @@ end)
 local ScreenGui, MainFrame, TopBar, ExitBtn, MinBtn, OpenPill, StatusLabel
 local Container1, Container2, Container3, Container4, Container5, Container6, Container7
 local TargetLabel, NextTargetBtn, PlayerListFrame
+local equipMatchingFightingStyle, toolMatchesCategory, equipSelectedWeapon, equipBestCombatTool, purchaseFightingStyle
 
 runStep("BuildUI", function()
 	local guiParent = safeGetGuiParent()
@@ -1171,7 +1260,7 @@ runStep("BuildUI", function()
 		return card
 	end
 
-	local function equipMatchingFightingStyle(styleEntry)
+	equipMatchingFightingStyle = function(styleEntry)
 		local equipped = false
 		pcall(function()
 			local char = LocalPlayer.Character
@@ -1185,10 +1274,10 @@ runStep("BuildUI", function()
 				if not tool or not tool:IsA("Tool") then
 					return false
 				end
-				local tName = string.lower(tool.Name)
+				local tName = string.lower(tostring(tool.Name))
 				local tType = string.lower(tostring(tool.ToolTip or ""))
 				for _, kw in ipairs(styleEntry.toolKeywords or {}) do
-					local k = string.lower(kw)
+					local k = string.lower(tostring(kw))
 					if string.find(tName, k, 1, true) or string.find(tType, k, 1, true) then
 						return true
 					end
@@ -1216,7 +1305,7 @@ runStep("BuildUI", function()
 		return equipped
 	end
 
-	local function toolMatchesCategory(tool, category)
+	toolMatchesCategory = function(tool, category)
 		if not tool or not tool:IsA("Tool") then
 			return false
 		end
@@ -1234,7 +1323,7 @@ runStep("BuildUI", function()
 		return false
 	end
 
-	local function equipSelectedWeapon(preferredCategory)
+	equipSelectedWeapon = function(preferredCategory)
 		pcall(function()
 			local char = LocalPlayer.Character
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -1273,30 +1362,32 @@ runStep("BuildUI", function()
 		end)
 	end
 
-	local function equipBestCombatTool()
+	equipBestCombatTool = function()
 		equipSelectedWeapon(SelectedFarmWeapon)
 	end
 
-	local function purchaseFightingStyle(styleEntry)
-		StatusLabel.Text = "●  Shop: Buying " .. styleEntry.name .. "..."
+	purchaseFightingStyle = function(styleEntry)
+		StatusLabel.Text = "●  Shop: Buying " .. tostring(styleEntry.name) .. "..."
 		StatusLabel.TextColor3 = AccentGlow
-		pcall(function()
-			local commf = getCommF()
-			if commf then
-				for _, argPack in ipairs(styleEntry.argsList or {}) do
-					invokeOrFireRemote(commf, table.unpack(argPack))
-					task.wait(0.12)
+		task.spawn(function()
+			pcall(function()
+				local commf = getCommF()
+				if commf then
+					for _, argPack in ipairs(styleEntry.calls or {}) do
+						invokeOrFireRemote(commf, table.unpack(argPack))
+						task.wait(0.14)
+					end
 				end
-			end
 
-			task.wait(0.25)
-			if equipMatchingFightingStyle(styleEntry) then
-				StatusLabel.Text = "●  Shop: Equipped " .. styleEntry.name
-				StatusLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
-			else
-				StatusLabel.Text = "●  Shop: Sent Request (" .. styleEntry.name .. ")"
-				StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-			end
+				task.wait(0.35)
+				if equipMatchingFightingStyle(styleEntry) then
+					StatusLabel.Text = "●  Shop: Equipped " .. tostring(styleEntry.name)
+					StatusLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
+				else
+					StatusLabel.Text = "●  Shop: Attempted " .. tostring(styleEntry.name)
+					StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+				end
+			end)
 		end)
 	end
 
@@ -1967,19 +2058,6 @@ runStep("Loops", function()
 		end
 	end)
 
-	local function isPointerOverUI()
-		local ok, over = pcall(function()
-			if not MainFrame.Visible then
-				return false
-			end
-			local mousePos = UserInputService:GetMouseLocation()
-			local topLeft = MainFrame.AbsolutePosition
-			local bottomRight = topLeft + MainFrame.AbsoluteSize
-			return mousePos.X >= topLeft.X and mousePos.X <= bottomRight.X and mousePos.Y >= topLeft.Y and mousePos.Y <= bottomRight.Y
-		end)
-		return ok and over or false
-	end
-
 	local function collectHitParts(targetModel)
 		local hits = {}
 		if not targetModel or not targetModel.Parent then
@@ -1999,9 +2077,44 @@ runStep("Loops", function()
 		return hits
 	end
 
-	local function fireCombatRemotes(targetModel)
+	local function collectNearbyCombatTargets(myRoot, primaryTarget)
+		local result = {}
+		local seen = {}
+		local function addModel(m)
+			if m and m:IsA("Model") and not seen[m] then
+				local hum = m:FindFirstChildOfClass("Humanoid")
+				local root = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
+				if hum and hum.Health > 0 and root then
+					seen[m] = true
+					table.insert(result, m)
+				end
+			end
+		end
+		addModel(primaryTarget)
+		if myRoot then
+			local enemiesFolder = Workspace:FindFirstChild("Enemies")
+			if enemiesFolder then
+				for _, m in ipairs(enemiesFolder:GetChildren()) do
+					local r = m:FindFirstChild("HumanoidRootPart")
+					if r and (myRoot.Position - r.Position).Magnitude <= 65 then
+						addModel(m)
+					end
+				end
+			end
+		end
+		return result
+	end
+
+	local function fireCombatRemotes(targetModel, myRoot)
 		pcall(function()
-			local hitList = collectHitParts(targetModel)
+			local targets = collectNearbyCombatTargets(myRoot, targetModel)
+			local allHits = {}
+			for _, m in ipairs(targets) do
+				for _, h in ipairs(collectHitParts(m)) do
+					table.insert(allHits, h)
+				end
+			end
+
 			local net = ReplicatedStorage:FindFirstChild("Modules") and ReplicatedStorage.Modules:FindFirstChild("Net")
 			if net then
 				local regAttack = net:FindFirstChild("RE/RegisterAttack")
@@ -2009,9 +2122,9 @@ runStep("Loops", function()
 				if regAttack and regAttack:IsA("RemoteEvent") and type(regAttack.FireServer) == "function" then
 					pcall(function() regAttack:FireServer(0) end)
 				end
-				if regHit and regHit:IsA("RemoteEvent") and type(regHit.FireServer) == "function" and #hitList > 0 then
-					local mainPart = hitList[1][1]
-					pcall(function() regHit:FireServer(mainPart, hitList) end)
+				if regHit and regHit:IsA("RemoteEvent") and type(regHit.FireServer) == "function" and #allHits > 0 then
+					local mainPart = allHits[1][1]
+					pcall(function() regHit:FireServer(mainPart, allHits) end)
 				end
 			end
 		end)
@@ -2077,6 +2190,7 @@ runStep("Loops", function()
 		triggerAutoHaki()
 		pcall(function()
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			local root = char and char:FindFirstChild("HumanoidRootPart")
 			local tool = char and char:FindFirstChildOfClass("Tool")
 			if not tool then
 				equipBestCombatTool()
@@ -2091,7 +2205,7 @@ runStep("Loops", function()
 					pcall(function() remote:FireServer(1) end)
 				end
 			end
-			fireCombatRemotes(targetModel or CurrentCombatTargetModel)
+			fireCombatRemotes(targetModel or CurrentCombatTargetModel, root)
 			local vp = Camera and Camera.ViewportSize or Vector2.new(1280, 720)
 			local x = vp.X * 0.5
 			local y = vp.Y * 0.5
@@ -2110,14 +2224,11 @@ runStep("Loops", function()
 	end
 
 	local function triggerAutoClickerHit(char, targetModel)
-		fireCombatStrike(char, FastAttackEnabled and 0.08 or 0.15, true, targetModel)
+		fireCombatStrike(char, FastAttackEnabled and 0.08 or 0.16, true, targetModel)
 	end
 
 	local function triggerHit(char, targetModel)
-		if isPointerOverUI() then
-			return
-		end
-		fireCombatStrike(char, FastAttackEnabled and 0.09 or 0.16, true, targetModel)
+		fireCombatStrike(char, FastAttackEnabled and 0.08 or 0.16, true, targetModel)
 	end
 
 	task.spawn(function()
@@ -2173,7 +2284,7 @@ runStep("Loops", function()
 
 						root.AssemblyLinearVelocity = Vector3.zero
 						root.AssemblyAngularVelocity = Vector3.zero
-						if dist <= 22 then
+						if dist <= 25 then
 							triggerAutoClickerHit(char, tChar)
 						end
 					end
@@ -2182,34 +2293,32 @@ runStep("Loops", function()
 		end
 	end)
 
-	local function findQuestNPC(myPos)
-		local bestPart, bestDist = nil, math.huge
+	local function tryTakeBracketQuest(root, bracket)
+		if not AutoQuestEnabled or not bracket then
+			return
+		end
 		pcall(function()
+			local commf = getCommF()
+			if commf and bracket.questName then
+				invokeOrFireRemote(commf, "StartQuest", bracket.questName, bracket.questNum or 1)
+			end
 			local npcFolder = Workspace:FindFirstChild("NPCs")
 			local searchList = npcFolder and npcFolder:GetChildren() or Workspace:GetChildren()
+			local bestPart, bestDist = nil, math.huge
 			for _, obj in ipairs(searchList) do
 				if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) and not obj:FindFirstChildOfClass("Humanoid") then
-					if string.find(string.lower(obj.Name), "quest") then
-						local part = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-						if part then
-							local d = (myPos - part.Position).Magnitude
-							if d < bestDist then
-								bestDist = d
-								bestPart = part
-							end
+					local part = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+					if part then
+						local d = (root.Position - part.Position).Magnitude
+						if d < bestDist then
+							bestDist = d
+							bestPart = part
 						end
 					end
 				end
 			end
-		end)
-		return bestPart, bestDist
-	end
-
-	local function interactWithQuest(root, questPart)
-		pcall(function()
-			if questPart and questPart.Parent then
-				root.CFrame = questPart.CFrame * CFrame.new(0, 0, -4)
-				triggerWorldInteract(root, questPart.Parent)
+			if bestPart and bestDist < 260 then
+				triggerWorldInteract(root, bestPart.Parent)
 			end
 		end)
 	end
@@ -2223,7 +2332,7 @@ runStep("Loops", function()
 		local bestEnemy, bestRoot, bestHum, bestDist = nil, nil, nil, math.huge
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 			if enemy:IsA("Model") and predicate(enemy) then
-				local eRoot = enemy:FindFirstChild("HumanoidRootPart")
+				local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
 				local eHum = enemy:FindFirstChildOfClass("Humanoid")
 				if eRoot and eHum and eHum.Health > 0 then
 					local dist = (myPos - eRoot.Position).Magnitude
@@ -2248,7 +2357,7 @@ runStep("Loops", function()
 		local bestEnemy, bestRoot, bestHum, bestDist = nil, nil, nil, math.huge
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 			if enemy:IsA("Model") and enemyMatchesBracket(enemy, bracket) then
-				local eRoot = enemy:FindFirstChild("HumanoidRootPart")
+				local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
 				local eHum = enemy:FindFirstChildOfClass("Humanoid")
 				if eRoot and eHum and eHum.Health > 0 then
 					local dist = (myPos - eRoot.Position).Magnitude
@@ -2305,22 +2414,22 @@ runStep("Loops", function()
 			StatusLabel.Text = "●  " .. statusPrefix .. " [" .. SelectedFarmWeapon .. "]: " .. tostring(targetEnemy.Name) .. " (" .. tostring(math.floor(tHum.Health)) .. " HP)" .. reqTag
 			StatusLabel.TextColor3 = statusColor
 
-			local hoverHeight = (SelectedFarmWeapon == "Gun") and 9.5 or 6.5
+			local hoverHeight = (SelectedFarmWeapon == "Gun") and 10 or 7
 			local targetPos = tRoot.Position + Vector3.new(0, hoverHeight, 0)
 			local lookCF = CFrame.lookAt(targetPos, tRoot.Position)
 			local dist = (root.Position - targetPos).Magnitude
 
-			if dist > 3.5 then
+			if dist > 4.0 then
 				startTween(root, "Farm", lookCF, FlySpeed, 2.5)
 			else
 				stopTween("Farm")
 				root.CFrame = lookCF
+				root.AssemblyLinearVelocity = Vector3.zero
+				root.AssemblyAngularVelocity = Vector3.zero
 			end
 
-			root.AssemblyLinearVelocity = Vector3.zero
-			root.AssemblyAngularVelocity = Vector3.zero
 			bringMobsUnderPlayer(root.Position, tRoot, activeBracket)
-			if (root.Position - tRoot.Position).Magnitude <= 35 then
+			if (root.Position - tRoot.Position).Magnitude <= 50 then
 				triggerHit(char, targetEnemy)
 			end
 			return true
@@ -2398,14 +2507,9 @@ runStep("Loops", function()
 						local bracket = LockedFarmBracket
 						local reqRangeText = "Lv." .. tostring(bracket.minLvl) .. "-" .. tostring(bracket.maxLvl)
 
-						if AutoQuestEnabled and not hasActiveQuest() and (tick() - LastQuestAttemptTick) > 2.0 then
-							local qPart, qDist = findQuestNPC(root.Position)
-							if qPart and qDist < 220 then
-								LastQuestAttemptTick = tick()
-								StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Taking Quest (" .. bracket.questText .. ")..."
-								StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-								interactWithQuest(root, qPart)
-							end
+						if AutoQuestEnabled and not hasActiveQuest() and (tick() - LastQuestAttemptTick) > 2.5 then
+							LastQuestAttemptTick = tick()
+							tryTakeBracketQuest(root, bracket)
 						end
 
 						local mainEnemy, eRoot, eHum = getBracketEnemy(root.Position, bracket)
