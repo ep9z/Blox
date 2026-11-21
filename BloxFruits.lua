@@ -233,8 +233,6 @@ local EnemyLevelBrackets = {
 	{minLvl = 2725, maxLvl = 9999, keywords = {"high disciple"}, questText = "High Disciple", questName = "DeepForestQuest", questNum = 2}
 }
 
-local AllowedChestNames = {"GoldChest", "SilverChest", "DiamondChest"}
-
 local BloxFruitNames = {
 	"Rocket Fruit", "Spin Fruit", "Blade Fruit", "Chop Fruit", "Spring Fruit",
 	"Bomb Fruit", "Smoke Fruit", "Spike Fruit", "Flame Fruit", "Falcon Fruit",
@@ -1446,23 +1444,10 @@ end
 
 local function getBracketEnemy(myPos, bracket)
 	local enemiesFolder = Workspace:FindFirstChild("Enemies")
-	if not enemiesFolder then return nil, nil, nil end
+	if not enemiesFolder or not bracket then return nil, nil, nil end
 	local bestEnemy, bestRoot, bestHum, bestDist = nil, nil, nil, math.huge
 	for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-		if enemy:IsA("Model") then
-			local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
-			local eHum = enemy:FindFirstChildOfClass("Humanoid")
-			if eRoot and eHum and eHum.Health > 0 and bracket and enemyMatchesBracket(enemy, bracket) then
-				local dist = (myPos - eRoot.Position).Magnitude
-				if dist < bestDist then
-					bestDist, bestEnemy, bestRoot, bestHum = dist, enemy, eRoot, eHum
-				end
-			end
-		end
-	end
-	if bestEnemy then return bestEnemy, bestRoot, bestHum end
-	for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-		if enemy:IsA("Model") then
+		if enemy:IsA("Model") and enemyMatchesBracket(enemy, bracket) then
 			local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
 			local eHum = enemy:FindFirstChildOfClass("Humanoid")
 			if eRoot and eHum and eHum.Health > 0 then
@@ -1564,7 +1549,7 @@ task.spawn(function()
 					local e, eRoot, eHum = getBracketEnemy(root.Position, bracket)
 					if not farmTargetModel(char, root, e, eRoot, eHum, "Lv." .. tostring(myLvl) .. " | " .. bracket.questText, Color3.fromRGB(74, 222, 128), bracket) then
 						local sp = getSpawnPositionForKeywords(bracket.keywords, HighDiscipleFallbackPos)
-						StatusLabel.Text = "●  Moving to " .. bracket.questText .. "..."
+						StatusLabel.Text = "●  Waiting/Moving to " .. bracket.questText .. " [Lv." .. tostring(bracket.minLvl) .. "-" .. tostring(bracket.maxLvl) .. "]..."
 						StatusLabel.TextColor3 = ChestColor
 						moveToTarget(root, CFrame.new(sp), FlySpeed)
 					end
