@@ -63,7 +63,6 @@ local CurrentTween = nil
 local ActiveTweenOwner = nil
 local ScriptRunning = true
 local LastHitTick = 0
-local LastPvPClickTick = 0
 local LastRollTick = 0
 local LastStoreTick = 0
 local LastHakiTick = 0
@@ -178,7 +177,9 @@ local EnemyLevelBrackets = {
 	{minLvl = 2600, maxLvl = 2624, keywords = {"marine commodore"}, questText = "Marine Commodore"},
 	{minLvl = 2625, maxLvl = 2649, keywords = {"marine rear admiral"}, questText = "Marine Rear Admiral"},
 	{minLvl = 2650, maxLvl = 2674, keywords = {"fishman raider"}, questText = "Fishman Raider"},
-	{minLvl = 2675, maxLvl = 9999, keywords = {"fishman captain", "high disciple", "dragon crew", "hydra", "sea event", "shark", "terror", "piranha"}, questText = "Fishman Captain"}
+	{minLvl = 2675, maxLvl = 2699, keywords = {"fishman captain"}, questText = "Fishman Captain"},
+	{minLvl = 2700, maxLvl = 2724, keywords = {"high disciple"}, questText = "High Disciple"},
+	{minLvl = 2725, maxLvl = 9999, keywords = {"high disciple"}, questText = "High Disciple"}
 }
 
 local AllowedChestNames = {
@@ -245,12 +246,16 @@ end
 
 local function getBracketForLevel(lvl)
 	local targetLvl = tonumber(lvl) or 1
+	local bestBracket = nil
 	for _, b in ipairs(EnemyLevelBrackets) do
 		if targetLvl >= b.minLvl and targetLvl <= b.maxLvl then
 			return b
 		end
+		if b.minLvl <= targetLvl then
+			bestBracket = b
+		end
 	end
-	return EnemyLevelBrackets[#EnemyLevelBrackets]
+	return bestBracket or EnemyLevelBrackets[1]
 end
 
 local function enemyMatchesBracket(enemyModel, bracket)
