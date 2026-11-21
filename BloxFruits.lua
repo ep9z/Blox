@@ -5,30 +5,15 @@ local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
 
-local function runStep(stepName, fn)
-	local ok, err = pcall(fn)
-	if not ok then
-		warn("[NEXOARO Step Error - " .. tostring(stepName) .. "]: " .. tostring(err))
-	end
-	return ok, err
-end
-
-local function safeCall(fn, ...)
-	if type(fn) ~= "function" then
-		return false, nil
-	end
-	return pcall(fn, ...)
-end
-
-local function safeGetService(serviceName)
-	local ok, srv = pcall(function()
-		return game:GetService(serviceName)
-	end)
+local VirtualUser = (function()
+	local ok, srv = pcall(function() return game:GetService("VirtualUser") end)
 	return ok and srv or nil
-end
+end)()
 
-local VirtualUser = safeGetService("VirtualUser")
-local VirtualInputManager = safeGetService("VirtualInputManager")
+local VirtualInputManager = (function()
+	local ok, srv = pcall(function() return game:GetService("VirtualInputManager") end)
+	return ok and srv or nil
+end)()
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
@@ -44,6 +29,19 @@ local SeaBeastColor = Color3.fromRGB(56, 189, 248)
 local ChestColor = Color3.fromRGB(250, 204, 21)
 local FruitColor = Color3.fromRGB(192, 132, 252)
 
+local AutoFarmEnabled = false
+local FarmVampireEnabled = false
+local FarmDemonicSoulEnabled = false
+local FarmDragonScaleEnabled = false
+local FarmBonesEnabled = false
+local BringMobsEnabled = true
+local AutoQuestEnabled = true
+local FastAttackEnabled = true
+local AutoHakiEnabled = true
+local AntiAFKEnabled = true
+local WalkOnWaterEnabled = false
+local WalkSpeedEnabled = false
+local TargetWalkSpeed = 100
 local BoatSpeedEnabled = false
 local TargetBoatSpeed = 180
 local AutoSailEnabled = false
@@ -51,23 +49,8 @@ local LockedSailDir = nil
 local BoatNoclipEnabled = false
 local AutoChestEnabled = false
 local AutoAttackSeaEnabled = false
-local WalkSpeedEnabled = false
-local TargetWalkSpeed = 100
-local AutoQuestFarmEnabled = false
-local FarmVampireEnabled = false
-local FarmDemonicSoulEnabled = false
-local FarmDragonScaleEnabled = false
-local FarmBonesEnabled = false
-local BringMobsEnabled = false
-local AutoQuestEnabled = true
-local FastAttackEnabled = true
-local AutoHakiEnabled = true
-local AntiAFKEnabled = true
-local WalkOnWaterEnabled = false
 local ESPEnabled = false
-local ChestESPEnabled = false
 local RemoveFogEnabled = false
-local FruitESPEnabled = false
 local AutoGetFruitsEnabled = false
 local AutoStoreFruitEnabled = false
 local AutoRollFruitEnabled = false
@@ -76,125 +59,83 @@ local AimBotEnabled = false
 local PvPSpeed = 340
 local SelectedPvPPlayer = nil
 local FlySpeed = 350
-local BringRadius = 350
+local BringRadius = 140
 local ScriptRunning = true
+
 local LastHitTick = 0
 local LastBringTick = 0
 local LastRollTick = 0
 local LastStoreTick = 0
 local LastHakiTick = 0
 local LastQuestAttemptTick = 0
+
 local WaterPart = nil
-
-local WeaponModes = {"Melee", "Fruit", "Sword", "Gun"}
-local WeaponModeIndex = 1
-local SelectedFarmWeapon = WeaponModes[WeaponModeIndex]
-
 local SavedFogState = nil
 local LockedFarmBracket = nil
+local CachedCombatRemote = nil
 
 local HydraIslandFallbackPos = Vector3.new(5750, 610, -280)
 local HauntedCastleFallbackPos = Vector3.new(-9500, 145, 6080)
 local HighDiscipleFallbackPos = Vector3.new(-6730, 75, -1285)
 
+local WeaponModes = {"Melee", "Fruit", "Sword", "Gun"}
+local WeaponModeIndex = 1
+local SelectedFarmWeapon = WeaponModes[WeaponModeIndex]
+
 local FightingStylesList = {
 	{
 		name = "Dark Step",
-		calls = {
-			{"BuyBlackLeg"},
-			{"BuyBlackLeg", true},
-			{"BuyBlackLeg", "Buy"}
-		},
+		calls = {{"BuyBlackLeg"}, {"BuyBlackLeg", true}, {"BuyBlackLeg", "Buy"}},
 		toolKeywords = {"dark step", "black leg", "step"}
 	},
 	{
 		name = "Electric",
-		calls = {
-			{"BuyElectro"},
-			{"BuyElectro", true},
-			{"BuyElectro", "Buy"}
-		},
+		calls = {{"BuyElectro"}, {"BuyElectro", true}, {"BuyElectro", "Buy"}},
 		toolKeywords = {"electric", "electro"}
 	},
 	{
 		name = "Water Kung Fu",
-		calls = {
-			{"BuyFishmanKarate"},
-			{"BuyFishmanKarate", true},
-			{"BuyFishmanKarate", "Buy"}
-		},
+		calls = {{"BuyFishmanKarate"}, {"BuyFishmanKarate", true}, {"BuyFishmanKarate", "Buy"}},
 		toolKeywords = {"water kung", "fishman karate", "water kung fu"}
 	},
 	{
 		name = "Dragon Breath",
-		calls = {
-			{"BlackbeardReward", "DragonClaw", "1"},
-			{"BlackbeardReward", "DragonClaw", "2"},
-			{"BuyDragonClaw"}
-		},
+		calls = {{"BlackbeardReward", "DragonClaw", "1"}, {"BlackbeardReward", "DragonClaw", "2"}, {"BuyDragonClaw"}},
 		toolKeywords = {"dragon breath", "dragon claw"}
 	},
 	{
 		name = "Superhuman",
-		calls = {
-			{"BuySuperhuman"},
-			{"BuySuperhuman", true},
-			{"BuySuperhuman", "Buy"}
-		},
+		calls = {{"BuySuperhuman"}, {"BuySuperhuman", true}, {"BuySuperhuman", "Buy"}},
 		toolKeywords = {"superhuman"}
 	},
 	{
 		name = "Death Step",
-		calls = {
-			{"BuyDeathStep"},
-			{"BuyDeathStep", true},
-			{"BuyDeathStep", "Buy"}
-		},
+		calls = {{"BuyDeathStep"}, {"BuyDeathStep", true}, {"BuyDeathStep", "Buy"}},
 		toolKeywords = {"death step"}
 	},
 	{
 		name = "Sharkman Karate",
-		calls = {
-			{"BuySharkmanKarate"},
-			{"BuySharkmanKarate", true},
-			{"BuySharkmanKarate", "Buy"}
-		},
+		calls = {{"BuySharkmanKarate"}, {"BuySharkmanKarate", true}, {"BuySharkmanKarate", "Buy"}},
 		toolKeywords = {"sharkman karate", "sharkman"}
 	},
 	{
 		name = "Electric Claw",
-		calls = {
-			{"BuyElectricClaw"},
-			{"BuyElectricClaw", true},
-			{"BuyElectricClaw", "Buy"}
-		},
+		calls = {{"BuyElectricClaw"}, {"BuyElectricClaw", true}, {"BuyElectricClaw", "Buy"}},
 		toolKeywords = {"electric claw"}
 	},
 	{
 		name = "Dragon Talon",
-		calls = {
-			{"BuyDragonTalon"},
-			{"BuyDragonTalon", true},
-			{"BuyDragonTalon", "Buy"}
-		},
+		calls = {{"BuyDragonTalon"}, {"BuyDragonTalon", true}, {"BuyDragonTalon", "Buy"}},
 		toolKeywords = {"dragon talon"}
 	},
 	{
 		name = "Godhuman",
-		calls = {
-			{"BuyGodhuman"},
-			{"BuyGodhuman", true},
-			{"BuyGodhuman", "Buy"}
-		},
+		calls = {{"BuyGodhuman"}, {"BuyGodhuman", true}, {"BuyGodhuman", "Buy"}},
 		toolKeywords = {"godhuman"}
 	},
 	{
 		name = "Sanguine Art",
-		calls = {
-			{"BuySanguineArt"},
-			{"BuySanguineArt", true},
-			{"BuySanguineArt", "Buy"}
-		},
+		calls = {{"BuySanguineArt"}, {"BuySanguineArt", true}, {"BuySanguineArt", "Buy"}},
 		toolKeywords = {"sanguine art", "sanguine"}
 	}
 }
@@ -292,11 +233,7 @@ local EnemyLevelBrackets = {
 	{minLvl = 2725, maxLvl = 9999, keywords = {"high disciple"}, questText = "High Disciple", questName = "DeepForestQuest", questNum = 2}
 }
 
-local AllowedChestNames = {
-	"GoldChest",
-	"SilverChest",
-	"DiamondChest"
-}
+local AllowedChestNames = {"GoldChest", "SilverChest", "DiamondChest"}
 
 local BloxFruitNames = {
 	"Rocket Fruit", "Spin Fruit", "Blade Fruit", "Chop Fruit", "Spring Fruit",
@@ -323,15 +260,14 @@ end
 
 local TrackedPlayers = {}
 local TrackedNPCs = {}
-local TrackedChests = {}
-local TrackedFruits = {}
 local SeaEventKeywords = {"seabeast", "sea beast", "terror", "shark", "leviathan", "piranha", "ship", "ghost", "mirage", "kitsune"}
-local CurrentCombatTargetModel = nil
+
+local function hasActiveTargetFarm()
+	return AutoFarmEnabled or FarmVampireEnabled or FarmDemonicSoulEnabled or FarmDragonScaleEnabled or FarmBonesEnabled
+end
 
 local function safeGetGuiParent()
-	local ok, coreGui = pcall(function()
-		return game:GetService("CoreGui")
-	end)
+	local ok, coreGui = pcall(function() return game:GetService("CoreGui") end)
 	if ok and coreGui then
 		local testOk = pcall(function()
 			local f = Instance.new("Folder")
@@ -343,11 +279,62 @@ local function safeGetGuiParent()
 			return coreGui
 		end
 	end
-	local playerGui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
-	if playerGui then
-		return playerGui
+	return LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 10)
+end
+
+local function getCommF()
+	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+	if remotes then
+		local commf = remotes:FindFirstChild("CommF_")
+		if commf then
+			return commf
+		end
 	end
-	return LocalPlayer:WaitForChild("PlayerGui", 10)
+	for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
+		if (rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent")) and string.lower(rem.Name) == "commf_" then
+			return rem
+		end
+	end
+	return nil
+end
+
+local function getCombatRemote()
+	if CachedCombatRemote and CachedCombatRemote.Parent then
+		return CachedCombatRemote
+	end
+	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+	if remotes then
+		for _, name in ipairs({"Combat", "Hit", "Attack", "Melee"}) do
+			local r = remotes:FindFirstChild(name)
+			if r and r:IsA("RemoteEvent") then
+				CachedCombatRemote = r
+				return r
+			end
+		end
+	end
+	for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
+		if desc:IsA("RemoteEvent") then
+			local n = string.lower(desc.Name)
+			if n == "combat" or n == "hit" then
+				CachedCombatRemote = desc
+				return desc
+			end
+		end
+	end
+	return nil
+end
+
+local function invokeOrFireRemote(rem, ...)
+	if not rem then
+		return false
+	end
+	local args = {...}
+	if rem:IsA("RemoteFunction") and type(rem.InvokeServer) == "function" then
+		return pcall(function() rem:InvokeServer(table.unpack(args)) end)
+	elseif rem:IsA("RemoteEvent") and type(rem.FireServer) == "function" then
+		return pcall(function() rem:FireServer(table.unpack(args)) end)
+	end
+	return false
 end
 
 local function clearFlyMover(root)
@@ -368,7 +355,7 @@ local function moveToTarget(root, targetCF, speed)
 	end
 	local offset = targetCF.Position - root.Position
 	local dist = offset.Magnitude
-	if dist <= 3.5 then
+	if dist <= 3.0 then
 		clearFlyMover(root)
 		root.CFrame = targetCF
 		root.AssemblyLinearVelocity = Vector3.zero
@@ -378,9 +365,7 @@ local function moveToTarget(root, targetCF, speed)
 
 	local bv = root:FindFirstChild("NexoaroFlyVel")
 	if not bv or not bv:IsA("BodyVelocity") then
-		if bv then
-			pcall(function() bv:Destroy() end)
-		end
+		if bv then pcall(function() bv:Destroy() end) end
 		bv = Instance.new("BodyVelocity")
 		bv.Name = "NexoaroFlyVel"
 		bv.MaxForce = Vector3.new(1e7, 1e7, 1e7)
@@ -388,13 +373,31 @@ local function moveToTarget(root, targetCF, speed)
 		bv.Parent = root
 	end
 
-	local travelSpeed = math.max(speed or FlySpeed, 150)
+	local travelSpeed = math.max(speed or FlySpeed, 180)
+	local stepDist = math.min(dist, travelSpeed * 0.05)
 	bv.Velocity = offset.Unit * travelSpeed
 
-	local stepDist = math.min(dist, travelSpeed * 0.05)
 	local nextPos = root.Position + (offset.Unit * stepDist)
 	root.CFrame = CFrame.lookAt(nextPos, targetCF.Position)
+	root.AssemblyLinearVelocity = Vector3.zero
 	root.AssemblyAngularVelocity = Vector3.zero
+end
+
+local function getPlayerLevel()
+	local ok, lvl = pcall(function()
+		local data = LocalPlayer:FindFirstChild("Data")
+		local levelVal = data and data:FindFirstChild("Level")
+		if levelVal and type(levelVal.Value) == "number" then
+			return levelVal.Value
+		end
+		local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
+		local lsLevel = leaderstats and (leaderstats:FindFirstChild("Level") or leaderstats:FindFirstChild("Lvl"))
+		if lsLevel and type(lsLevel.Value) == "number" then
+			return lsLevel.Value
+		end
+		return 1
+	end)
+	return ok and lvl or 1
 end
 
 local function getBracketForLevel(lvl)
@@ -426,10 +429,154 @@ local function enemyMatchesBracket(enemyModel, bracket)
 	return false
 end
 
-local function captureOriginalFogState()
-	if SavedFogState then
-		return
+local function isSeaEvent(name)
+	local lower = string.lower(tostring(name))
+	for _, kw in ipairs(SeaEventKeywords) do
+		if string.find(lower, kw) then
+			return true
+		end
 	end
+	return false
+end
+
+local function isVampireEnemy(model)
+	return model and model.Name and string.find(string.lower(tostring(model.Name)), "vampire") ~= nil
+end
+
+local function isDemonicSoulEnemy(model)
+	return model and model.Name and string.find(string.lower(tostring(model.Name)), "demonic soul") ~= nil
+end
+
+local function isDragonScaleEnemy(model)
+	if not model or not model.Name then return false end
+	local lower = string.lower(tostring(model.Name))
+	return string.find(lower, "dragon crew warrior") ~= nil or string.find(lower, "dragon crew archer") ~= nil
+end
+
+local function isBoneEnemy(model)
+	if not model or not model.Name then return false end
+	local lower = string.lower(tostring(model.Name))
+	return string.find(lower, "reborn skeleton") ~= nil
+		or string.find(lower, "living zombie") ~= nil
+		or string.find(lower, "demonic soul") ~= nil
+		or string.find(lower, "posessed mummy") ~= nil
+		or string.find(lower, "possessed mummy") ~= nil
+end
+
+local function getSpawnPositionForKeywords(keywords, fallbackPos)
+	local spawns = Workspace:FindFirstChild("_WorldOrigin") and Workspace._WorldOrigin:FindFirstChild("EnemySpawns")
+	if spawns then
+		for _, sp in ipairs(spawns:GetChildren()) do
+			local lower = string.lower(sp.Name)
+			for _, kw in ipairs(keywords or {}) do
+				if string.find(lower, string.lower(kw), 1, true) then
+					local part = sp:IsA("BasePart") and sp or sp:FindFirstChildWhichIsA("BasePart", true)
+					if part then
+						return part.Position + Vector3.new(0, 12, 0)
+					end
+				end
+			end
+		end
+	end
+	return fallbackPos or HighDiscipleFallbackPos
+end
+
+local function getHydraDragonScalePosition()
+	return getSpawnPositionForKeywords({"dragon crew warrior", "dragon crew archer"}, HydraIslandFallbackPos)
+end
+
+local function getHauntedCastleBonesPosition()
+	return getSpawnPositionForKeywords({"reborn skeleton", "living zombie", "demonic soul"}, HauntedCastleFallbackPos)
+end
+
+local function resolveBloxFruitName(rawName)
+	if not rawName then return nil end
+	local lower = string.lower(tostring(rawName))
+	lower = string.gsub(lower, "^%s*(.-)%s*$", "%1")
+	lower = string.gsub(lower, "%s+fruit%s+fruit%s*$", " fruit")
+	if BloxFruitLookup[lower] then return BloxFruitLookup[lower] end
+	local stripped = string.gsub(lower, "%s*fruit%s*$", "")
+	if BloxFruitLookup[stripped] then return BloxFruitLookup[stripped] end
+	local dashBase = string.match(lower, "^([a-z%-]+)%-[a-z%-]+$")
+	if dashBase and BloxFruitLookup[dashBase] then return BloxFruitLookup[dashBase] end
+	return nil
+end
+
+local function getStoreFruitKey(item, resolvedName)
+	if item and item.GetAttribute then
+		local ok, attr = pcall(function() return item:GetAttribute("FruitName") end)
+		if ok and attr then return tostring(attr) end
+	end
+	local base = string.gsub(resolvedName, "%s*Fruit%s*$", "")
+	return base .. "-" .. base
+end
+
+local function isPickupableFruitInstance(obj)
+	if not obj or not obj.Name or not obj.Parent then return false end
+	if Players:GetPlayerFromCharacter(obj) or obj:FindFirstAncestorWhichIsA("Player") then return false end
+	if not resolveBloxFruitName(obj.Name) then return false end
+	if obj:IsA("Tool") then return true end
+	if obj:IsA("Model") or obj:IsA("BasePart") then
+		if obj:FindFirstChild("Handle")
+			or obj:FindFirstChildWhichIsA("TouchTransmitter", true)
+			or obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+			or obj:FindFirstChildWhichIsA("ClickDetector", true)
+			or obj.Name == "Handle" then
+			return true
+		end
+	end
+	return false
+end
+
+local function getFruitAnchorPart(obj)
+	if not obj or not obj.Parent then return nil end
+	if obj:IsA("BasePart") then return obj end
+	if obj:IsA("Model") then
+		return obj:FindFirstChild("Handle") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
+	end
+	if obj:IsA("Tool") then
+		return obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart", true)
+	end
+	return nil
+end
+
+local function triggerAutoHaki()
+	if not AutoHakiEnabled then return end
+	local now = tick()
+	if (now - LastHakiTick) < 8 then return end
+	LastHakiTick = now
+	local char = LocalPlayer.Character
+	if not char or char:FindFirstChild("HasBuso") then return end
+	local commf = getCommF()
+	if commf then
+		invokeOrFireRemote(commf, "Buso")
+	end
+end
+
+local function ensureWalkOnWaterPart(rootPos)
+	pcall(function()
+		if not WalkOnWaterEnabled or not rootPos then
+			if WaterPart then
+				pcall(function() WaterPart:Destroy() end)
+				WaterPart = nil
+			end
+			return
+		end
+		if not WaterPart or not WaterPart.Parent then
+			WaterPart = Instance.new("Part")
+			WaterPart.Name = "NexoaroSeaPlatform"
+			WaterPart.Size = Vector3.new(28, 1, 28)
+			WaterPart.Anchored = true
+			WaterPart.CanCollide = true
+			WaterPart.Transparency = 1
+			WaterPart.Parent = Workspace
+		end
+		WaterPart.Position = Vector3.new(rootPos.X, -0.5, rootPos.Z)
+	end)
+end
+
+local function captureOriginalFogState()
+	if SavedFogState then return end
 	pcall(function()
 		local state = {
 			FogStart = Lighting.FogStart,
@@ -445,23 +592,12 @@ local function captureOriginalFogState()
 				state.Effects[obj] = obj.Enabled
 			end
 		end
-		if Camera then
-			for _, obj in ipairs(Camera:GetDescendants()) do
-				if obj:IsA("Atmosphere") then
-					state.Atmospheres[obj] = {Density = obj.Density, Haze = obj.Haze, Glare = obj.Glare}
-				elseif obj:IsA("ColorCorrectionEffect") or obj:IsA("BlurEffect") then
-					state.Effects[obj] = obj.Enabled
-				end
-			end
-		end
 		SavedFogState = state
 	end)
 end
 
 local function restoreOriginalFogState()
-	if not SavedFogState then
-		return
-	end
+	if not SavedFogState then return end
 	pcall(function()
 		Lighting.FogStart = SavedFogState.FogStart
 		Lighting.FogEnd = SavedFogState.FogEnd
@@ -503,2338 +639,1125 @@ local function clearSeaFog()
 	end)
 end
 
-local function ensureWalkOnWaterPart(rootPos)
-	pcall(function()
-		if not WalkOnWaterEnabled or not rootPos then
-			if WaterPart then
-				pcall(function() WaterPart:Destroy() end)
-				WaterPart = nil
-			end
-			return
+if VirtualUser and LocalPlayer and LocalPlayer.Idled then
+	LocalPlayer.Idled:Connect(function()
+		if AntiAFKEnabled then
+			pcall(function()
+				VirtualUser:CaptureController()
+				VirtualUser:ClickButton2(Vector2.new(500, 500))
+			end)
 		end
-		if not WaterPart or not WaterPart.Parent then
-			WaterPart = Instance.new("Part")
-			WaterPart.Name = "NexoaroSeaPlatform"
-			WaterPart.Size = Vector3.new(28, 1, 28)
-			WaterPart.Anchored = true
-			WaterPart.CanCollide = true
-			WaterPart.Transparency = 1
-			WaterPart.Parent = Workspace
-		end
-		WaterPart.Position = Vector3.new(rootPos.X, -0.5, rootPos.Z)
 	end)
 end
 
-local function isSeaEvent(name)
-	local lower = string.lower(tostring(name))
-	for _, kw in ipairs(SeaEventKeywords) do
-		if string.find(lower, kw) then
-			return true
-		end
-	end
-	return false
-end
-
-local function isVampireEnemy(model)
-	return model and model.Name and string.find(string.lower(tostring(model.Name)), "vampire") ~= nil
-end
-
-local function isDemonicSoulEnemy(model)
-	return model and model.Name and string.find(string.lower(tostring(model.Name)), "demonic soul") ~= nil
-end
-
-local function isDragonScaleEnemy(model)
-	if not model or not model.Name then
-		return false
-	end
-	local lower = string.lower(tostring(model.Name))
-	return string.find(lower, "dragon crew warrior") ~= nil or string.find(lower, "dragon crew archer") ~= nil
-end
-
-local function isBoneEnemy(model)
-	if not model or not model.Name then
-		return false
-	end
-	local lower = string.lower(tostring(model.Name))
-	return string.find(lower, "reborn skeleton") ~= nil
-		or string.find(lower, "living zombie") ~= nil
-		or string.find(lower, "demonic soul") ~= nil
-		or string.find(lower, "posessed mummy") ~= nil
-		or string.find(lower, "possessed mummy") ~= nil
-end
-
-local function getSpawnPositionForKeywords(keywords, fallbackPos)
-	local spawns = Workspace:FindFirstChild("_WorldOrigin") and Workspace._WorldOrigin:FindFirstChild("EnemySpawns")
-	if spawns then
-		for _, sp in ipairs(spawns:GetChildren()) do
-			local lower = string.lower(sp.Name)
-			for _, kw in ipairs(keywords or {}) do
-				if string.find(lower, string.lower(kw), 1, true) then
-					local part = sp:IsA("BasePart") and sp or sp:FindFirstChildWhichIsA("BasePart", true)
-					if part then
-						return part.Position + Vector3.new(0, 12, 0)
-					end
-				end
-			end
-		end
-	end
-	return fallbackPos or HighDiscipleFallbackPos
-end
-
-local function getHydraDragonScalePosition()
-	return getSpawnPositionForKeywords({"dragon crew warrior", "dragon crew archer"}, HydraIslandFallbackPos)
-end
-
-local function getHauntedCastleBonesPosition()
-	return getSpawnPositionForKeywords({"reborn skeleton", "living zombie", "demonic soul"}, HauntedCastleFallbackPos)
-end
-
-local function resolveBloxFruitName(rawName)
-	if not rawName then
-		return nil
-	end
-	local lower = string.lower(tostring(rawName))
-	lower = string.gsub(lower, "^%s*(.-)%s*$", "%1")
-	lower = string.gsub(lower, "%s+fruit%s+fruit%s*$", " fruit")
-	if BloxFruitLookup[lower] then
-		return BloxFruitLookup[lower]
-	end
-	local stripped = string.gsub(lower, "%s*fruit%s*$", "")
-	if BloxFruitLookup[stripped] then
-		return BloxFruitLookup[stripped]
-	end
-	local dashBase = string.match(lower, "^([a-z%-]+)%-[a-z%-]+$")
-	if dashBase and BloxFruitLookup[dashBase] then
-		return BloxFruitLookup[dashBase]
-	end
-	return nil
-end
-
-local function getStoreFruitKey(item, resolvedName)
-	if item and item.GetAttribute then
-		local ok, attr = pcall(function()
-			return item:GetAttribute("FruitName")
-		end)
-		if ok and attr then
-			return tostring(attr)
-		end
-	end
-	local base = string.gsub(resolvedName, "%s*Fruit%s*$", "")
-	return base .. "-" .. base
-end
-
-local function isPickupableFruitInstance(obj)
-	if not obj or not obj.Name or not obj.Parent then
-		return false
-	end
-	if Players:GetPlayerFromCharacter(obj) or obj:FindFirstAncestorWhichIsA("Player") then
-		return false
-	end
-	if not resolveBloxFruitName(obj.Name) then
-		return false
-	end
-	if obj:IsA("Tool") then
-		return true
-	end
-	if obj:IsA("Model") or obj:IsA("BasePart") then
-		if obj:FindFirstChild("Handle")
-			or obj:FindFirstChildWhichIsA("TouchTransmitter", true)
-			or obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-			or obj:FindFirstChildWhichIsA("ClickDetector", true)
-			or obj.Name == "Handle" then
-			return true
-		end
-	end
-	return false
-end
-
-local function getFruitAnchorPart(obj)
-	if not obj or not obj.Parent then
-		return nil
-	end
-	if obj:IsA("BasePart") then
-		return obj
-	end
-	if obj:IsA("Model") then
-		return obj:FindFirstChild("Handle") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
-	end
-	if obj:IsA("Tool") then
-		return obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart", true)
-	end
-	return nil
-end
-
-local function hasActiveTargetFarm()
-	return AutoQuestFarmEnabled or FarmVampireEnabled or FarmDemonicSoulEnabled or FarmDragonScaleEnabled or FarmBonesEnabled
-end
-
-local function getCommF()
-	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-	if remotes then
-		local commf = remotes:FindFirstChild("CommF_")
-		if commf then
-			return commf
-		end
-	end
-	for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
-		if (rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent")) and string.lower(rem.Name) == "commf_" then
-			return rem
-		end
-	end
-	return nil
-end
-
-local function invokeOrFireRemote(rem, ...)
-	if not rem then
-		return false
-	end
-	local args = {...}
-	if rem:IsA("RemoteFunction") and type(rem.InvokeServer) == "function" then
-		return pcall(function()
-			rem:InvokeServer(table.unpack(args))
-		end)
-	elseif rem:IsA("RemoteEvent") and type(rem.FireServer) == "function" then
-		return pcall(function()
-			rem:FireServer(table.unpack(args))
-		end)
-	end
-	return false
-end
-
-local function triggerAutoHaki()
-	if not AutoHakiEnabled then
-		return
-	end
-	local now = tick()
-	if (now - LastHakiTick) < 8 then
-		return
-	end
-	LastHakiTick = now
-	local char = LocalPlayer.Character
-	if not char or char:FindFirstChild("HasBuso") then
-		return
-	end
-	local commf = getCommF()
-	if commf then
-		invokeOrFireRemote(commf, "Buso")
+local guiParent = safeGetGuiParent()
+for _, gui in ipairs(guiParent:GetChildren()) do
+	if gui.Name == "NexoaroHub" then
+		pcall(function() gui:Destroy() end)
 	end
 end
 
-runStep("AntiAFK", function()
-	if VirtualUser and LocalPlayer and LocalPlayer.Idled then
-		LocalPlayer.Idled:Connect(function()
-			if AntiAFKEnabled then
-				safeCall(VirtualUser.CaptureController, VirtualUser)
-				safeCall(VirtualUser.ClickButton2, VirtualUser, Vector2.new(500, 500))
-			end
-		end)
-	end
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "NexoaroHub"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999
+ScreenGui.Parent = guiParent
+
+local isMobile = false
+pcall(function()
+	local vp = Camera and Camera.ViewportSize or Vector2.new(1280, 720)
+	isMobile = (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) or vp.X < 750
 end)
 
-local ScreenGui, MainFrame, TopBar, ExitBtn, MinBtn, OpenPill, StatusLabel
-local Container1, Container2, Container3, Container4, Container5, Container6, Container7
-local TargetLabel, NextTargetBtn, PlayerListFrame
-local equipMatchingFightingStyle, toolMatchesCategory, equipSelectedWeapon, equipBestCombatTool, purchaseFightingStyle
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = isMobile and UDim2.new(0, 326, 0, 368) or UDim2.new(0, 445, 0, 442)
+MainFrame.Position = isMobile and UDim2.new(0.03, 0, 0.11, 0) or UDim2.new(0.02, 0, 0.22, 0)
+MainFrame.BackgroundColor3 = BgDark
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = ScreenGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 14)
 
-runStep("BuildUI", function()
-	local guiParent = safeGetGuiParent()
-	for _, gui in ipairs(guiParent:GetChildren()) do
-		if gui.Name == "NexoaroController" then
-			pcall(function() gui:Destroy() end)
-		end
-	end
+local mainStroke = Instance.new("UIStroke", MainFrame)
+mainStroke.Color = ThemeColor
+mainStroke.Thickness = 1.6
+mainStroke.Transparency = 0.18
 
-	ScreenGui = Instance.new("ScreenGui")
-	ScreenGui.Name = "NexoaroController"
-	ScreenGui.ResetOnSpawn = false
-	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	ScreenGui.DisplayOrder = 999
-	ScreenGui.Parent = guiParent
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, isMobile and 38 or 44)
+TopBar.BackgroundColor3 = CardDark
+TopBar.BorderSizePixel = 0
+TopBar.Parent = MainFrame
 
-	local isMobile = false
-	pcall(function()
-		local vp = Camera and Camera.ViewportSize or Vector2.new(1280, 720)
-		isMobile = (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) or vp.X < 750
-	end)
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -180, 1, 0)
+Title.Position = UDim2.new(0, 14, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "NEXOARO  |  BLOX FRUITS"
+Title.TextColor3 = TextMain
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = isMobile and 12 or 14
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TopBar
 
-	MainFrame = Instance.new("Frame")
-	MainFrame.Size = isMobile and UDim2.new(0, 326, 0, 368) or UDim2.new(0, 445, 0, 442)
-	MainFrame.Position = isMobile and UDim2.new(0.03, 0, 0.11, 0) or UDim2.new(0.02, 0, 0.22, 0)
-	MainFrame.BackgroundColor3 = BgDark
-	MainFrame.BorderSizePixel = 0
-	MainFrame.ClipsDescendants = true
-	MainFrame.Parent = ScreenGui
+local ExitBtn = Instance.new("TextButton")
+ExitBtn.Size = UDim2.new(0, 24, 0, 24)
+ExitBtn.Position = UDim2.new(1, -32, 0.5, -12)
+ExitBtn.BackgroundColor3 = Color3.fromRGB(225, 29, 72)
+ExitBtn.Text = "X"
+ExitBtn.TextColor3 = Color3.new(1, 1, 1)
+ExitBtn.Font = Enum.Font.GothamBold
+ExitBtn.TextSize = 11
+ExitBtn.Parent = TopBar
+Instance.new("UICorner", ExitBtn).CornerRadius = UDim.new(0, 7)
 
-	Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 14)
-	local mainStroke = Instance.new("UIStroke", MainFrame)
-	mainStroke.Color = ThemeColor
-	mainStroke.Thickness = 1.6
-	mainStroke.Transparency = 0.18
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 24, 0, 24)
+MinBtn.Position = UDim2.new(1, -60, 0.5, -12)
+MinBtn.BackgroundColor3 = Color3.fromRGB(36, 33, 54)
+MinBtn.Text = "-"
+MinBtn.TextColor3 = TextMain
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 13
+MinBtn.Parent = TopBar
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 7)
 
-	local mainGrad = Instance.new("UIGradient", MainFrame)
-	mainGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(18, 13, 30)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 7, 14))
-	})
-	mainGrad.Rotation = 135
+local OpenPill = Instance.new("TextButton")
+OpenPill.Size = UDim2.new(0, 120, 0, 32)
+OpenPill.Position = UDim2.new(0.02, 0, 0.1, 0)
+OpenPill.BackgroundColor3 = CardDark
+OpenPill.Text = "◆ NEXOARO"
+OpenPill.TextColor3 = AccentGlow
+OpenPill.Font = Enum.Font.GothamBold
+OpenPill.TextSize = 11
+OpenPill.Visible = false
+OpenPill.Parent = ScreenGui
+Instance.new("UICorner", OpenPill).CornerRadius = UDim.new(1, 0)
+Instance.new("UIStroke", OpenPill).Color = ThemeColor
 
-	TopBar = Instance.new("Frame")
-	TopBar.Size = UDim2.new(1, 0, 0, isMobile and 38 or 44)
-	TopBar.BackgroundColor3 = CardDark
-	TopBar.BorderSizePixel = 0
-	TopBar.Parent = MainFrame
+MinBtn.MouseButton1Click:Connect(function()
+	MainFrame.Visible = false
+	OpenPill.Visible = true
+end)
 
-	local topGrad = Instance.new("UIGradient", TopBar)
-	topGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(38, 18, 62)),
-		ColorSequenceKeypoint.new(1, CardDark)
-	})
-	topGrad.Rotation = 90
-
-	local BrandDot = Instance.new("Frame")
-	BrandDot.Size = UDim2.new(0, 8, 0, 8)
-	BrandDot.Position = UDim2.new(0, 12, 0.5, -4)
-	BrandDot.BackgroundColor3 = ThemeColor
-	BrandDot.BorderSizePixel = 0
-	BrandDot.Parent = TopBar
-	Instance.new("UICorner", BrandDot).CornerRadius = UDim.new(1, 0)
-
-	local Title = Instance.new("TextLabel")
-	Title.Size = UDim2.new(1, -95, 1, 0)
-	Title.Position = UDim2.new(0, 26, 0, 0)
-	Title.BackgroundTransparency = 1
-	Title.Text = "NEXOARO"
-	Title.TextColor3 = TextMain
-	Title.Font = Enum.Font.GothamBlack
-	Title.TextSize = isMobile and 13 or 15
-	Title.TextXAlignment = Enum.TextXAlignment.Left
-	Title.Parent = TopBar
-
-	local SubTitle = Instance.new("TextLabel")
-	SubTitle.Size = UDim2.new(0, 120, 1, 0)
-	SubTitle.Position = UDim2.new(0, isMobile and 88 or 104, 0, 0)
-	SubTitle.BackgroundTransparency = 1
-	SubTitle.Text = "PRO SEA & FARM HUB"
-	SubTitle.TextColor3 = AccentGlow
-	SubTitle.Font = Enum.Font.GothamBold
-	SubTitle.TextSize = isMobile and 8.8 or 9.8
-	SubTitle.TextXAlignment = Enum.TextXAlignment.Left
-	SubTitle.Parent = TopBar
-
-	ExitBtn = Instance.new("TextButton")
-	ExitBtn.Size = UDim2.new(0, 24, 0, 24)
-	ExitBtn.Position = UDim2.new(1, -32, 0.5, -12)
-	ExitBtn.BackgroundColor3 = Color3.fromRGB(225, 29, 72)
-	ExitBtn.Text = "X"
-	ExitBtn.TextColor3 = Color3.new(1, 1, 1)
-	ExitBtn.Font = Enum.Font.GothamBold
-	ExitBtn.TextSize = 11
-	ExitBtn.Parent = TopBar
-	Instance.new("UICorner", ExitBtn).CornerRadius = UDim.new(0, 7)
-
-	MinBtn = Instance.new("TextButton")
-	MinBtn.Size = UDim2.new(0, 24, 0, 24)
-	MinBtn.Position = UDim2.new(1, -60, 0.5, -12)
-	MinBtn.BackgroundColor3 = Color3.fromRGB(36, 33, 54)
-	MinBtn.Text = "-"
-	MinBtn.TextColor3 = TextMain
-	MinBtn.Font = Enum.Font.GothamBold
-	MinBtn.TextSize = 13
-	MinBtn.Parent = TopBar
-	Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 7)
-
-	OpenPill = Instance.new("TextButton")
-	OpenPill.Size = UDim2.new(0, 116, 0, 32)
-	OpenPill.Position = UDim2.new(0.02, 0, 0.1, 0)
-	OpenPill.BackgroundColor3 = CardDark
-	OpenPill.Text = "◆ NEXOARO"
-	OpenPill.TextColor3 = AccentGlow
-	OpenPill.Font = Enum.Font.GothamBold
-	OpenPill.TextSize = 11
+OpenPill.MouseButton1Click:Connect(function()
+	MainFrame.Visible = true
 	OpenPill.Visible = false
-	OpenPill.Parent = ScreenGui
-	Instance.new("UICorner", OpenPill).CornerRadius = UDim.new(1, 0)
-	local pillStroke = Instance.new("UIStroke", OpenPill)
-	pillStroke.Color = ThemeColor
-	pillStroke.Thickness = 1.5
+end)
 
-	local function safeRemoveDrawing(d)
-		if d and type(d.Remove) == "function" then
-			pcall(function() d:Remove() end)
-		end
+ExitBtn.MouseButton1Click:Connect(function()
+	ScriptRunning = false
+	LockedSailDir = nil
+	LockedFarmBracket = nil
+	WalkOnWaterEnabled = false
+	ensureWalkOnWaterPart(nil)
+	if RemoveFogEnabled then
+		RemoveFogEnabled = false
+		restoreOriginalFogState()
 	end
-
-	MinBtn.MouseButton1Click:Connect(function()
-		MainFrame.Visible = false
-		OpenPill.Visible = true
+	pcall(function()
+		local char = LocalPlayer.Character
+		local root = char and char:FindFirstChild("HumanoidRootPart")
+		clearFlyMover(root)
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hum then hum.WalkSpeed = 16 end
 	end)
+	for _, esp in pairs(TrackedPlayers) do
+		for _, d in pairs(esp) do
+			if d and type(d.Remove) == "function" then pcall(function() d:Remove() end) end
+		end
+	end
+	for _, esp in pairs(TrackedNPCs) do
+		if esp and esp.Text and type(esp.Text.Remove) == "function" then
+			pcall(function() esp.Text:Remove() end)
+		end
+	end
+	pcall(function() ScreenGui:Destroy() end)
+end)
 
-	OpenPill.MouseButton1Click:Connect(function()
-		MainFrame.Visible = true
-		OpenPill.Visible = false
+local topOffset = isMobile and 38 or 44
+
+local StatusCard = Instance.new("Frame")
+StatusCard.Size = UDim2.new(1, -20, 0, 26)
+StatusCard.Position = UDim2.new(0, 10, 0, topOffset + 8)
+StatusCard.BackgroundColor3 = CardDark
+StatusCard.BorderSizePixel = 0
+StatusCard.Parent = MainFrame
+Instance.new("UICorner", StatusCard).CornerRadius = UDim.new(0, 8)
+Instance.new("UIStroke", StatusCard).Color = Color3.fromRGB(52, 44, 78)
+
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, -16, 1, 0)
+StatusLabel.Position = UDim2.new(0, 8, 0, 0)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "●  Status: Ready"
+StatusLabel.TextColor3 = TextMuted
+StatusLabel.Font = Enum.Font.GothamSemibold
+StatusLabel.TextSize = 10
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.Parent = StatusCard
+
+local TabBar = Instance.new("Frame")
+TabBar.Size = UDim2.new(1, -20, 0, 32)
+TabBar.Position = UDim2.new(0, 10, 0, topOffset + 40)
+TabBar.BackgroundColor3 = CardDark
+TabBar.BorderSizePixel = 0
+TabBar.ClipsDescendants = true
+TabBar.Parent = MainFrame
+Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 8)
+
+local tabLayout = Instance.new("UIListLayout")
+tabLayout.FillDirection = Enum.FillDirection.Horizontal
+tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+tabLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+tabLayout.Padding = UDim.new(0, 2)
+tabLayout.Parent = TabBar
+
+local bodyTop = topOffset + 80
+local function makeTabContainer(canvasH, visible)
+	local sf = Instance.new("ScrollingFrame")
+	sf.Size = UDim2.new(1, -20, 1, -(bodyTop + 10))
+	sf.Position = UDim2.new(0, 10, 0, bodyTop)
+	sf.BackgroundTransparency = 1
+	sf.ScrollBarThickness = 3
+	sf.ScrollBarImageColor3 = ThemeColor
+	sf.CanvasSize = UDim2.new(0, 0, 0, canvasH)
+	sf.Visible = visible
+	sf.Parent = MainFrame
+	return sf
+end
+
+local Container1 = makeTabContainer(460, true)
+local Container2 = makeTabContainer(240, false)
+local Container3 = makeTabContainer(240, false)
+local Container4 = makeTabContainer(160, false)
+local Container5 = makeTabContainer(275, false)
+local Container6 = makeTabContainer(160, false)
+local Container7 = makeTabContainer((#FightingStylesList * 38) + 12, false)
+
+local tabNames = {"Farm", "Sea", "Player", "Visuals", "PvP", "Fruits", "Shop"}
+local containers = {Container1, Container2, Container3, Container4, Container5, Container6, Container7}
+local tabButtons = {}
+
+local function switchTab(idx)
+	for i, c in ipairs(containers) do
+		c.Visible = (i == idx)
+	end
+	for i, b in ipairs(tabButtons) do
+		local active = (i == idx)
+		b.BackgroundTransparency = active and 0 or 1
+		b.BackgroundColor3 = active and ThemeColor or Color3.fromRGB(24, 21, 38)
+		b.TextColor3 = active and Color3.new(1, 1, 1) or TextMuted
+	end
+end
+
+for i, name in ipairs(tabNames) do
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1 / #tabNames, -2.5, 1, 0)
+	btn.BackgroundColor3 = Color3.fromRGB(24, 21, 38)
+	btn.BackgroundTransparency = (i == 1) and 0 or 1
+	btn.Text = name
+	btn.TextColor3 = (i == 1) and Color3.new(1, 1, 1) or TextMuted
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 8.5
+	btn.Parent = TabBar
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+	btn.MouseButton1Click:Connect(function() switchTab(i) end)
+	table.insert(tabButtons, btn)
+end
+
+local function makeDraggable(handle, target)
+	local dragging, dragStart, startPos = false, nil, nil
+	handle.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging, dragStart, startPos = true, input.Position, target.Position
+		end
 	end)
-
-	ExitBtn.MouseButton1Click:Connect(function()
-		ScriptRunning = false
-		LockedSailDir = nil
-		LockedFarmBracket = nil
-		CurrentCombatTargetModel = nil
-		WalkOnWaterEnabled = false
-		ensureWalkOnWaterPart(nil)
-		if RemoveFogEnabled then
-			RemoveFogEnabled = false
-			restoreOriginalFogState()
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStart
+			target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
 		end
-		pcall(function()
-			local char = LocalPlayer.Character
-			local root = char and char:FindFirstChild("HumanoidRootPart")
-			clearFlyMover(root)
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			if hum then
-				hum.WalkSpeed = 16
-			end
-		end)
-		for _, esp in pairs(TrackedPlayers) do
-			for _, d in pairs(esp) do
-				safeRemoveDrawing(d)
-			end
-		end
-		for _, esp in pairs(TrackedNPCs) do
-			safeRemoveDrawing(esp and esp.Text)
-		end
-		for _, esp in pairs(TrackedChests) do
-			safeRemoveDrawing(esp and esp.Text)
-		end
-		for _, esp in pairs(TrackedFruits) do
-			safeRemoveDrawing(esp and esp.Text)
-		end
-		pcall(function() ScreenGui:Destroy() end)
 	end)
-
-	local topOffset = isMobile and 38 or 44
-
-	local StatusCard = Instance.new("Frame")
-	StatusCard.Size = UDim2.new(1, -20, 0, 26)
-	StatusCard.Position = UDim2.new(0, 10, 0, topOffset + 8)
-	StatusCard.BackgroundColor3 = CardDark
-	StatusCard.BorderSizePixel = 0
-	StatusCard.Parent = MainFrame
-	Instance.new("UICorner", StatusCard).CornerRadius = UDim.new(0, 8)
-	local statusStroke = Instance.new("UIStroke", StatusCard)
-	statusStroke.Color = Color3.fromRGB(52, 44, 78)
-	statusStroke.Thickness = 1
-
-	StatusLabel = Instance.new("TextLabel")
-	StatusLabel.Size = UDim2.new(1, -16, 1, 0)
-	StatusLabel.Position = UDim2.new(0, 8, 0, 0)
-	StatusLabel.BackgroundTransparency = 1
-	StatusLabel.Text = "●  Status: Ready"
-	StatusLabel.TextColor3 = TextMuted
-	StatusLabel.Font = Enum.Font.GothamSemibold
-	StatusLabel.TextSize = 10
-	StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-	StatusLabel.Parent = StatusCard
-
-	local TabBar = Instance.new("Frame")
-	TabBar.Size = UDim2.new(1, -20, 0, 32)
-	TabBar.Position = UDim2.new(0, 10, 0, topOffset + 40)
-	TabBar.BackgroundColor3 = CardDark
-	TabBar.BorderSizePixel = 0
-	TabBar.ClipsDescendants = true
-	TabBar.Parent = MainFrame
-	Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 8)
-
-	local tabLayout = Instance.new("UIListLayout")
-	tabLayout.FillDirection = Enum.FillDirection.Horizontal
-	tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	tabLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	tabLayout.Padding = UDim.new(0, 2)
-	tabLayout.Parent = TabBar
-
-	local tabPadding = Instance.new("UIPadding")
-	tabPadding.PaddingLeft = UDim.new(0, 2)
-	tabPadding.PaddingRight = UDim.new(0, 2)
-	tabPadding.PaddingTop = UDim.new(0, 3)
-	tabPadding.PaddingBottom = UDim.new(0, 3)
-	tabPadding.Parent = TabBar
-
-	local function createTabButton(name, total)
-		local tabBtn = Instance.new("TextButton")
-		tabBtn.Size = UDim2.new(1 / total, -2.5, 1, 0)
-		tabBtn.BackgroundColor3 = Color3.fromRGB(24, 21, 38)
-		tabBtn.BackgroundTransparency = 1
-		tabBtn.Text = name
-		tabBtn.TextColor3 = TextMuted
-		tabBtn.Font = Enum.Font.GothamBold
-		tabBtn.TextSize = 8.4
-		tabBtn.TextScaled = false
-		tabBtn.Parent = TabBar
-		Instance.new("UICorner", tabBtn).CornerRadius = UDim.new(0, 6)
-		return tabBtn
-	end
-
-	local bodyTop = topOffset + 80
-	Container1 = Instance.new("ScrollingFrame")
-	Container1.Size = UDim2.new(1, -20, 1, -(bodyTop + 10))
-	Container1.Position = UDim2.new(0, 10, 0, bodyTop)
-	Container1.BackgroundTransparency = 1
-	Container1.ScrollBarThickness = 3
-	Container1.ScrollBarImageColor3 = ThemeColor
-	Container1.CanvasSize = UDim2.new(0, 0, 0, 240)
-	Container1.Visible = true
-	Container1.Parent = MainFrame
-
-	Container2 = Instance.new("ScrollingFrame")
-	Container2.Size = Container1.Size
-	Container2.Position = Container1.Position
-	Container2.BackgroundTransparency = 1
-	Container2.ScrollBarThickness = 3
-	Container2.ScrollBarImageColor3 = ThemeColor
-	Container2.CanvasSize = UDim2.new(0, 0, 0, 450)
-	Container2.Visible = false
-	Container2.Parent = MainFrame
-
-	Container3 = Instance.new("ScrollingFrame")
-	Container3.Size = Container1.Size
-	Container3.Position = Container1.Position
-	Container3.BackgroundTransparency = 1
-	Container3.ScrollBarThickness = 3
-	Container3.ScrollBarImageColor3 = ThemeColor
-	Container3.CanvasSize = UDim2.new(0, 0, 0, 240)
-	Container3.Visible = false
-	Container3.Parent = MainFrame
-
-	Container4 = Instance.new("ScrollingFrame")
-	Container4.Size = Container1.Size
-	Container4.Position = Container1.Position
-	Container4.BackgroundTransparency = 1
-	Container4.ScrollBarThickness = 3
-	Container4.ScrollBarImageColor3 = ThemeColor
-	Container4.CanvasSize = UDim2.new(0, 0, 0, 160)
-	Container4.Visible = false
-	Container4.Parent = MainFrame
-
-	Container5 = Instance.new("ScrollingFrame")
-	Container5.Size = Container1.Size
-	Container5.Position = Container1.Position
-	Container5.BackgroundTransparency = 1
-	Container5.ScrollBarThickness = 3
-	Container5.ScrollBarImageColor3 = ThemeColor
-	Container5.CanvasSize = UDim2.new(0, 0, 0, 275)
-	Container5.Visible = false
-	Container5.Parent = MainFrame
-
-	Container6 = Instance.new("ScrollingFrame")
-	Container6.Size = Container1.Size
-	Container6.Position = Container1.Position
-	Container6.BackgroundTransparency = 1
-	Container6.ScrollBarThickness = 3
-	Container6.ScrollBarImageColor3 = ThemeColor
-	Container6.CanvasSize = UDim2.new(0, 0, 0, 160)
-	Container6.Visible = false
-	Container6.Parent = MainFrame
-
-	Container7 = Instance.new("ScrollingFrame")
-	Container7.Size = Container1.Size
-	Container7.Position = Container1.Position
-	Container7.BackgroundTransparency = 1
-	Container7.ScrollBarThickness = 3
-	Container7.ScrollBarImageColor3 = ThemeColor
-	Container7.CanvasSize = UDim2.new(0, 0, 0, (#FightingStylesList * 38) + 12)
-	Container7.Visible = false
-	Container7.Parent = MainFrame
-
-	local tab1Btn = createTabButton("Sea", 7)
-	local tab2Btn = createTabButton("Farm", 7)
-	local tab3Btn = createTabButton("Player", 7)
-	local tab4Btn = createTabButton("Visuals", 7)
-	local tab5Btn = createTabButton("PvP", 7)
-	local tab6Btn = createTabButton("Fruits", 7)
-	local tab7Btn = createTabButton("Shop", 7)
-
-	tab1Btn.BackgroundTransparency = 0
-	tab1Btn.BackgroundColor3 = ThemeColor
-	tab1Btn.TextColor3 = Color3.new(1, 1, 1)
-
-	local function switchTab(activeBtn, activeContainer)
-		for _, c in ipairs({Container1, Container2, Container3, Container4, Container5, Container6, Container7}) do
-			c.Visible = false
+	handle.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
 		end
-		for _, b in ipairs({tab1Btn, tab2Btn, tab3Btn, tab4Btn, tab5Btn, tab6Btn, tab7Btn}) do
-			b.BackgroundTransparency = 1
-			b.TextColor3 = TextMuted
-		end
-		activeContainer.Visible = true
-		activeBtn.BackgroundTransparency = 0
-		activeBtn.BackgroundColor3 = ThemeColor
-		activeBtn.TextColor3 = Color3.new(1, 1, 1)
-	end
+	end)
+end
+makeDraggable(TopBar, MainFrame)
+makeDraggable(OpenPill, OpenPill)
 
-	tab1Btn.MouseButton1Click:Connect(function() switchTab(tab1Btn, Container1) end)
-	tab2Btn.MouseButton1Click:Connect(function() switchTab(tab2Btn, Container2) end)
-	tab3Btn.MouseButton1Click:Connect(function() switchTab(tab3Btn, Container3) end)
-	tab4Btn.MouseButton1Click:Connect(function() switchTab(tab4Btn, Container4) end)
-	tab5Btn.MouseButton1Click:Connect(function() switchTab(tab5Btn, Container5) end)
-	tab6Btn.MouseButton1Click:Connect(function() switchTab(tab6Btn, Container6) end)
-	tab7Btn.MouseButton1Click:Connect(function() switchTab(tab7Btn, Container7) end)
+local function createToggle(parent, text, yPos, defaultState, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, -6, 0, 32)
+	row.Position = UDim2.new(0, 2, 0, yPos)
+	row.BackgroundColor3 = CardDark
+	row.BorderSizePixel = 0
+	row.Parent = parent
+	Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+	local stroke = Instance.new("UIStroke", row)
+	stroke.Color = defaultState and ThemeColor or Color3.fromRGB(42, 36, 64)
+	stroke.Thickness = 1
 
-	local function makeDraggable(handle, target)
-		local dragging, dragStart, startPos = false, nil, nil
-		handle.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-				dragging, dragStart, startPos = true, input.Position, target.Position
-			end
-		end)
-		UserInputService.InputChanged:Connect(function(input)
-			if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-				local delta = input.Position - dragStart
-				target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-			end
-		end)
-		handle.InputEnded:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-				dragging = false
-			end
-		end)
-	end
-	makeDraggable(TopBar, MainFrame)
-	makeDraggable(OpenPill, OpenPill)
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -62, 1, 0)
+	label.Position = UDim2.new(0, 10, 0, 0)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = TextMain
+	label.Font = Enum.Font.GothamSemibold
+	label.TextSize = 10.5
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = row
 
-	local function createToggle(parent, text, yPos, defaultState, callback)
-		local row = Instance.new("Frame")
-		row.Size = UDim2.new(1, -6, 0, 32)
-		row.Position = UDim2.new(0, 2, 0, yPos)
-		row.BackgroundColor3 = CardDark
-		row.BorderSizePixel = 0
-		row.Parent = parent
-		Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
-		local stroke = Instance.new("UIStroke", row)
-		stroke.Color = defaultState and ThemeColor or Color3.fromRGB(42, 36, 64)
-		stroke.Thickness = 1
+	local state = defaultState or false
+	local pill = Instance.new("TextButton")
+	pill.Size = UDim2.new(0, 44, 0, 20)
+	pill.Position = UDim2.new(1, -52, 0.5, -10)
+	pill.BackgroundColor3 = state and ThemeColor or Color3.fromRGB(34, 30, 50)
+	pill.Text = state and "ON" or "OFF"
+	pill.TextColor3 = state and Color3.new(1, 1, 1) or TextMuted
+	pill.Font = Enum.Font.GothamBold
+	pill.TextSize = 9.5
+	pill.Active = true
+	pill.Parent = row
+	Instance.new("UICorner", pill).CornerRadius = UDim.new(1, 0)
 
-		local label = Instance.new("TextLabel")
-		label.Size = UDim2.new(1, -62, 1, 0)
-		label.Position = UDim2.new(0, 10, 0, 0)
-		label.BackgroundTransparency = 1
-		label.Text = text
-		label.TextColor3 = TextMain
-		label.Font = Enum.Font.GothamSemibold
-		label.TextSize = 10.5
-		label.TextXAlignment = Enum.TextXAlignment.Left
-		label.Parent = row
-
-		local state = defaultState or false
-		local pill = Instance.new("TextButton")
-		pill.Size = UDim2.new(0, 44, 0, 20)
-		pill.Position = UDim2.new(1, -52, 0.5, -10)
-		pill.BackgroundColor3 = state and ThemeColor or Color3.fromRGB(34, 30, 50)
+	pill.MouseButton1Click:Connect(function()
+		state = not state
 		pill.Text = state and "ON" or "OFF"
+		pill.BackgroundColor3 = state and ThemeColor or Color3.fromRGB(34, 30, 50)
 		pill.TextColor3 = state and Color3.new(1, 1, 1) or TextMuted
-		pill.Font = Enum.Font.GothamBold
-		pill.TextSize = 9.5
-		pill.Active = true
-		pill.Parent = row
-		Instance.new("UICorner", pill).CornerRadius = UDim.new(1, 0)
+		stroke.Color = state and ThemeColor or Color3.fromRGB(42, 36, 64)
+		pcall(function() callback(state) end)
+	end)
+	return row
+end
 
-		local function setState(newState)
-			state = newState
-			pill.Text = state and "ON" or "OFF"
-			pill.BackgroundColor3 = state and ThemeColor or Color3.fromRGB(34, 30, 50)
-			pill.TextColor3 = state and Color3.new(1, 1, 1) or TextMuted
-			stroke.Color = state and ThemeColor or Color3.fromRGB(42, 36, 64)
-			pcall(function() callback(state, pill) end)
+local function createActionButton(parent, text, buttonText, yPos, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, -6, 0, 32)
+	row.Position = UDim2.new(0, 2, 0, yPos)
+	row.BackgroundColor3 = CardDark
+	row.BorderSizePixel = 0
+	row.Parent = parent
+	Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+	Instance.new("UIStroke", row).Color = Color3.fromRGB(46, 39, 72)
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -88, 1, 0)
+	label.Position = UDim2.new(0, 10, 0, 0)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = TextMain
+	label.Font = Enum.Font.GothamSemibold
+	label.TextSize = 10.5
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = row
+
+	local actionBtn = Instance.new("TextButton")
+	actionBtn.Size = UDim2.new(0, 72, 0, 20)
+	actionBtn.Position = UDim2.new(1, -80, 0.5, -10)
+	actionBtn.BackgroundColor3 = ThemeColor
+	actionBtn.Text = buttonText
+	actionBtn.TextColor3 = Color3.new(1, 1, 1)
+	actionBtn.Font = Enum.Font.GothamBold
+	actionBtn.TextSize = 9.5
+	actionBtn.Active = true
+	actionBtn.Parent = row
+	Instance.new("UICorner", actionBtn).CornerRadius = UDim.new(0, 6)
+
+	actionBtn.MouseButton1Click:Connect(function()
+		pcall(function() callback(actionBtn) end)
+	end)
+	return row, actionBtn
+end
+
+local function createSlider(parent, yPos, prefix, minVal, maxVal, initialVal, onChange)
+	local card = Instance.new("Frame")
+	card.Size = UDim2.new(1, -6, 0, 42)
+	card.Position = UDim2.new(0, 2, 0, yPos)
+	card.BackgroundColor3 = CardDark
+	card.BorderSizePixel = 0
+	card.Parent = parent
+	Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+	Instance.new("UIStroke", card).Color = Color3.fromRGB(42, 36, 64)
+
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -20, 0, 16)
+	lbl.Position = UDim2.new(0, 10, 0, 5)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = prefix .. ": " .. tostring(initialVal)
+	lbl.TextColor3 = TextMain
+	lbl.Font = Enum.Font.GothamSemibold
+	lbl.TextSize = 10
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.Parent = card
+
+	local bg = Instance.new("Frame")
+	bg.Size = UDim2.new(1, -20, 0, 7)
+	bg.Position = UDim2.new(0, 10, 0, 26)
+	bg.BackgroundColor3 = Color3.fromRGB(32, 28, 48)
+	bg.BorderSizePixel = 0
+	bg.Parent = card
+	Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
+
+	local initRatio = math.clamp((initialVal - minVal) / (maxVal - minVal), 0, 1)
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.new(initRatio, 0, 1, 0)
+	fill.BackgroundColor3 = ThemeColor
+	fill.BorderSizePixel = 0
+	fill.Parent = bg
+	Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+	local dragging = false
+	bg.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			pcall(function()
+				local relX = math.clamp((input.Position.X - bg.AbsolutePosition.X) / bg.AbsoluteSize.X, 0, 1)
+				fill.Size = UDim2.new(relX, 0, 1, 0)
+				local val = math.floor(minVal + (relX * (maxVal - minVal)))
+				lbl.Text = prefix .. ": " .. tostring(val)
+				onChange(val)
+			end)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+	return card
+end
+
+local function toolMatchesCategory(tool, category)
+	if not tool or not tool:IsA("Tool") then return false end
+	local tip = string.lower(tostring(tool.ToolTip or ""))
+	local name = string.lower(tostring(tool.Name or ""))
+	if category == "Melee" then
+		if string.find(tip, "melee", 1, true) then return true end
+		for _, styleEntry in ipairs(FightingStylesList) do
+			for _, kw in ipairs(styleEntry.toolKeywords or {}) do
+				if string.find(name, string.lower(kw), 1, true) then return true end
+			end
+		end
+		return false
+	elseif category == "Fruit" then
+		return string.find(tip, "fruit", 1, true) ~= nil or string.find(name, "fruit", 1, true) ~= nil
+	elseif category == "Sword" then
+		return string.find(tip, "sword", 1, true) ~= nil
+	elseif category == "Gun" then
+		return string.find(tip, "gun", 1, true) ~= nil
+	end
+	return true
+end
+
+local function equipSelectedWeapon(preferredCategory)
+	pcall(function()
+		local char = LocalPlayer.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local backpack = LocalPlayer:FindFirstChild("Backpack")
+		if not char or not hum or hum.Health <= 0 then return end
+
+		local wanted = preferredCategory or SelectedFarmWeapon or "Melee"
+		local current = char:FindFirstChildOfClass("Tool")
+		if current and toolMatchesCategory(current, wanted) then return end
+
+		if backpack then
+			for _, tool in ipairs(backpack:GetChildren()) do
+				if toolMatchesCategory(tool, wanted) then
+					pcall(function() hum:EquipTool(tool) end)
+					return
+				end
+			end
 		end
 
-		pill.MouseButton1Click:Connect(function()
-			setState(not state)
-		end)
-		return row
-	end
-
-	local function createActionButton(parent, text, buttonText, yPos, callback)
-		local row = Instance.new("Frame")
-		row.Size = UDim2.new(1, -6, 0, 32)
-		row.Position = UDim2.new(0, 2, 0, yPos)
-		row.BackgroundColor3 = CardDark
-		row.BorderSizePixel = 0
-		row.Parent = parent
-		Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
-		local stroke = Instance.new("UIStroke", row)
-		stroke.Color = Color3.fromRGB(46, 39, 72)
-		stroke.Thickness = 1
-
-		local label = Instance.new("TextLabel")
-		label.Size = UDim2.new(1, -88, 1, 0)
-		label.Position = UDim2.new(0, 10, 0, 0)
-		label.BackgroundTransparency = 1
-		label.Text = text
-		label.TextColor3 = TextMain
-		label.Font = Enum.Font.GothamSemibold
-		label.TextSize = 10.5
-		label.TextXAlignment = Enum.TextXAlignment.Left
-		label.Parent = row
-
-		local actionBtn = Instance.new("TextButton")
-		actionBtn.Size = UDim2.new(0, 72, 0, 20)
-		actionBtn.Position = UDim2.new(1, -80, 0.5, -10)
-		actionBtn.BackgroundColor3 = ThemeColor
-		actionBtn.Text = buttonText
-		actionBtn.TextColor3 = Color3.new(1, 1, 1)
-		actionBtn.Font = Enum.Font.GothamBold
-		actionBtn.TextSize = 9.5
-		actionBtn.Active = true
-		actionBtn.Parent = row
-		Instance.new("UICorner", actionBtn).CornerRadius = UDim.new(0, 6)
-
-		actionBtn.MouseButton1Click:Connect(function()
-			stroke.Color = AccentGlow
-			actionBtn.BackgroundColor3 = Color3.fromRGB(139, 92, 246)
-			pcall(function() callback(actionBtn) end)
-			task.delay(0.25, function()
-				if stroke and stroke.Parent then
-					stroke.Color = Color3.fromRGB(46, 39, 72)
-				end
-				if actionBtn and actionBtn.Parent then
-					actionBtn.BackgroundColor3 = ThemeColor
-				end
-			end)
-		end)
-
-		return row, actionBtn
-	end
-
-	local function createSlider(parent, yPos, prefix, minVal, maxVal, initialVal, onChange)
-		local card = Instance.new("Frame")
-		card.Size = UDim2.new(1, -6, 0, 42)
-		card.Position = UDim2.new(0, 2, 0, yPos)
-		card.BackgroundColor3 = CardDark
-		card.BorderSizePixel = 0
-		card.Parent = parent
-		Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
-		local stroke = Instance.new("UIStroke", card)
-		stroke.Color = Color3.fromRGB(42, 36, 64)
-		stroke.Thickness = 1
-
-		local lbl = Instance.new("TextLabel")
-		lbl.Size = UDim2.new(1, -20, 0, 16)
-		lbl.Position = UDim2.new(0, 10, 0, 5)
-		lbl.BackgroundTransparency = 1
-		lbl.Text = prefix .. ": " .. tostring(initialVal)
-		lbl.TextColor3 = TextMain
-		lbl.Font = Enum.Font.GothamSemibold
-		lbl.TextSize = 10
-		lbl.TextXAlignment = Enum.TextXAlignment.Left
-		lbl.Parent = card
-
-		local bg = Instance.new("Frame")
-		bg.Size = UDim2.new(1, -20, 0, 7)
-		bg.Position = UDim2.new(0, 10, 0, 26)
-		bg.BackgroundColor3 = Color3.fromRGB(32, 28, 48)
-		bg.BorderSizePixel = 0
-		bg.Parent = card
-		Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
-
-		local initRatio = math.clamp((initialVal - minVal) / (maxVal - minVal), 0, 1)
-		local fill = Instance.new("Frame")
-		fill.Size = UDim2.new(initRatio, 0, 1, 0)
-		fill.BackgroundColor3 = ThemeColor
-		fill.BorderSizePixel = 0
-		fill.Parent = bg
-		Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-
-		local dragging = false
-		bg.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-				dragging = true
-			end
-		end)
-		UserInputService.InputChanged:Connect(function(input)
-			if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-				pcall(function()
-					local relX = math.clamp((input.Position.X - bg.AbsolutePosition.X) / bg.AbsoluteSize.X, 0, 1)
-					fill.Size = UDim2.new(relX, 0, 1, 0)
-					local val = math.floor(minVal + (relX * (maxVal - minVal)))
-					lbl.Text = prefix .. ": " .. tostring(val)
-					onChange(val)
-				end)
-			end
-		end)
-		UserInputService.InputEnded:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-				dragging = false
-			end
-		end)
-		return card
-	end
-
-	equipMatchingFightingStyle = function(styleEntry)
-		local equipped = false
-		pcall(function()
-			local char = LocalPlayer.Character
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			local backpack = LocalPlayer:FindFirstChild("Backpack")
-			if not char or not hum then
-				return
-			end
-
-			local function matchesStyleTool(tool)
-				if not tool or not tool:IsA("Tool") then
-					return false
-				end
-				local tName = string.lower(tostring(tool.Name))
-				local tType = string.lower(tostring(tool.ToolTip or ""))
-				for _, kw in ipairs(styleEntry.toolKeywords or {}) do
-					local k = string.lower(tostring(kw))
-					if string.find(tName, k, 1, true) or string.find(tType, k, 1, true) then
-						return true
+		if not current and backpack then
+			for _, fallbackCat in ipairs({"Melee", "Sword", "Fruit", "Gun"}) do
+				for _, tool in ipairs(backpack:GetChildren()) do
+					if toolMatchesCategory(tool, fallbackCat) then
+						pcall(function() hum:EquipTool(tool) end)
+						return
 					end
 				end
-				return false
 			end
+		end
+	end)
+end
 
-			for _, item in ipairs(char:GetChildren()) do
+local function equipMatchingFightingStyle(styleEntry)
+	local equipped = false
+	pcall(function()
+		local char = LocalPlayer.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local backpack = LocalPlayer:FindFirstChild("Backpack")
+		if not char or not hum then return end
+
+		local function matchesStyleTool(tool)
+			if not tool or not tool:IsA("Tool") then return false end
+			local tName = string.lower(tostring(tool.Name))
+			local tType = string.lower(tostring(tool.ToolTip or ""))
+			for _, kw in ipairs(styleEntry.toolKeywords or {}) do
+				local k = string.lower(tostring(kw))
+				if string.find(tName, k, 1, true) or string.find(tType, k, 1, true) then
+					return true
+				end
+			end
+			return false
+		end
+
+		for _, item in ipairs(char:GetChildren()) do
+			if matchesStyleTool(item) then equipped = true; return end
+		end
+		if backpack then
+			for _, item in ipairs(backpack:GetChildren()) do
 				if matchesStyleTool(item) then
+					pcall(function() hum:EquipTool(item) end)
 					equipped = true
 					return
 				end
 			end
-
-			if backpack then
-				for _, item in ipairs(backpack:GetChildren()) do
-					if matchesStyleTool(item) then
-						safeCall(hum.EquipTool, hum, item)
-						equipped = true
-						return
-					end
-				end
-			end
-		end)
-		return equipped
-	end
-
-	toolMatchesCategory = function(tool, category)
-		if not tool or not tool:IsA("Tool") then
-			return false
-		end
-		local tip = string.lower(tostring(tool.ToolTip or ""))
-		local name = string.lower(tostring(tool.Name or ""))
-		if category == "Melee" then
-			return tip == "melee" or string.find(tip, "melee", 1, true) ~= nil
-		elseif category == "Fruit" then
-			return tip == "blox fruit" or string.find(tip, "fruit", 1, true) ~= nil or string.find(name, "fruit", 1, true) ~= nil
-		elseif category == "Sword" then
-			return tip == "sword" or string.find(tip, "sword", 1, true) ~= nil
-		elseif category == "Gun" then
-			return tip == "gun" or string.find(tip, "gun", 1, true) ~= nil
-		end
-		return true
-	end
-
-	equipSelectedWeapon = function(preferredCategory)
-		pcall(function()
-			local char = LocalPlayer.Character
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			local backpack = LocalPlayer:FindFirstChild("Backpack")
-			if not char or not hum or hum.Health <= 0 then
-				return
-			end
-
-			local wanted = preferredCategory or SelectedFarmWeapon or "Melee"
-			local current = char:FindFirstChildOfClass("Tool")
-			if current and toolMatchesCategory(current, wanted) then
-				return
-			end
-
-			if backpack then
-				for _, tool in ipairs(backpack:GetChildren()) do
-					if toolMatchesCategory(tool, wanted) then
-						safeCall(hum.EquipTool, hum, tool)
-						return
-					end
-				end
-			end
-
-			if not current and backpack then
-				for _, fallbackCat in ipairs({"Melee", "Sword", "Fruit", "Gun"}) do
-					for _, tool in ipairs(backpack:GetChildren()) do
-						if toolMatchesCategory(tool, fallbackCat) then
-							safeCall(hum.EquipTool, hum, tool)
-							return
-						end
-					end
-				end
-				for _, tool in ipairs(backpack:GetChildren()) do
-					if tool:IsA("Tool") and tool.Name ~= "Compass" then
-						safeCall(hum.EquipTool, hum, tool)
-						return
-					end
-				end
-			end
-		end)
-	end
-
-	equipBestCombatTool = function()
-		equipSelectedWeapon(SelectedFarmWeapon)
-	end
-
-	purchaseFightingStyle = function(styleEntry)
-		StatusLabel.Text = "●  Shop: Buying " .. tostring(styleEntry.name) .. "..."
-		StatusLabel.TextColor3 = AccentGlow
-		task.spawn(function()
-			pcall(function()
-				local commf = getCommF()
-				if commf then
-					for _, argPack in ipairs(styleEntry.calls or {}) do
-						invokeOrFireRemote(commf, table.unpack(argPack))
-						task.wait(0.14)
-					end
-				end
-
-				task.wait(0.35)
-				if equipMatchingFightingStyle(styleEntry) then
-					StatusLabel.Text = "●  Shop: Equipped " .. tostring(styleEntry.name)
-					StatusLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
-				else
-					StatusLabel.Text = "●  Shop: Sent Buy (" .. tostring(styleEntry.name) .. ")"
-					StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-				end
-			end)
-		end)
-	end
-
-	local function clearBoatMover(seat)
-		pcall(function()
-			if not seat then
-				return
-			end
-			local mover = seat:FindFirstChild("NexoaroBoatVel")
-			if mover then
-				pcall(function() mover:Destroy() end)
-			end
-			local boatModel = seat:FindFirstAncestorOfClass("Model")
-			if boatModel then
-				for _, desc in ipairs(boatModel:GetDescendants()) do
-					if desc.Name == "NexoaroBoatVel" then
-						pcall(function() desc:Destroy() end)
-					end
-				end
-			end
-		end)
-	end
-
-	local function captureStraightSailDirection(seat)
-		local ok, dir = pcall(function()
-			if not seat or not seat:IsA("BasePart") then
-				return Vector3.new(0, 0, -1)
-			end
-			local boatModel = seat:FindFirstAncestorOfClass("Model")
-			local primary = (boatModel and (boatModel.PrimaryPart or seat)) or seat
-			local look = primary.CFrame.LookVector
-			local flat = Vector3.new(look.X, 0, look.Z)
-			if flat.Magnitude < 0.01 then
-				look = seat.CFrame.LookVector
-				flat = Vector3.new(look.X, 0, look.Z)
-			end
-			if flat.Magnitude < 0.01 then
-				return Vector3.new(0, 0, -1)
-			end
-			return flat.Unit
-		end)
-		if ok and dir then
-			return dir
-		end
-		return Vector3.new(0, 0, -1)
-	end
-
-	local function getBoatParts(seat)
-		local parts = {}
-		local seen = {}
-		local function addPart(p)
-			if p and p:IsA("BasePart") and not seen[p] then
-				seen[p] = true
-				table.insert(parts, p)
-			end
-		end
-		if seat and seat:IsA("BasePart") then
-			addPart(seat)
-			local boatModel = seat:FindFirstAncestorOfClass("Model")
-			if boatModel then
-				addPart(boatModel.PrimaryPart)
-				for _, obj in ipairs(boatModel:GetDescendants()) do
-					if obj:IsA("BasePart") and not obj.Anchored then
-						addPart(obj)
-					end
-				end
-			end
-		end
-		return parts
-	end
-
-	local function applyLockedSailVelocity(seat, speed, dir)
-		pcall(function()
-			if not seat or not seat:IsA("BasePart") or not dir then
-				return
-			end
-			local flatDir = Vector3.new(dir.X, 0, dir.Z)
-			if flatDir.Magnitude < 0.01 then
-				flatDir = Vector3.new(0, 0, -1)
-			else
-				flatDir = flatDir.Unit
-			end
-
-			local boatModel = seat:FindFirstAncestorOfClass("Model")
-			local primary = (boatModel and (boatModel.PrimaryPart or seat)) or seat
-			local targetVel = flatDir * speed
-
-			for _, part in ipairs(getBoatParts(seat)) do
-				if not part.Anchored then
-					part.AssemblyLinearVelocity = Vector3.new(targetVel.X, part.AssemblyLinearVelocity.Y, targetVel.Z)
-				end
-			end
-
-			local bv = primary:FindFirstChild("NexoaroBoatVel")
-			if not bv or not bv:IsA("BodyVelocity") then
-				if bv then
-					pcall(function() bv:Destroy() end)
-				end
-				bv = Instance.new("BodyVelocity")
-				bv.Name = "NexoaroBoatVel"
-				bv.MaxForce = Vector3.new(1e7, 0, 1e7)
-				bv.P = 1e5
-				bv.Parent = primary
-			end
-			bv.Velocity = targetVel
-
-			if seat:IsA("VehicleSeat") then
-				seat.MaxSpeed = math.max(speed, 150)
-				seat.Throttle = 1
-				seat.Steer = 0
-			end
-		end)
-	end
-
-	local function getPlayerLevel()
-		local ok, lvl = pcall(function()
-			local data = LocalPlayer:FindFirstChild("Data")
-			local levelVal = data and data:FindFirstChild("Level")
-			if levelVal and type(levelVal.Value) == "number" then
-				return levelVal.Value
-			end
-			local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
-			local lsLevel = leaderstats and (leaderstats:FindFirstChild("Level") or leaderstats:FindFirstChild("Lvl"))
-			if lsLevel and type(lsLevel.Value) == "number" then
-				return lsLevel.Value
-			end
-			return 1
-		end)
-		return ok and lvl or 1
-	end
-
-	createToggle(Container1, "Auto Sail (Stop on Event)", 0, false, function(state)
-		AutoSailEnabled = state
-		if state then
-			pcall(function()
-				local char = LocalPlayer.Character
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				if hum and hum.SeatPart then
-					LockedSailDir = captureStraightSailDirection(hum.SeatPart)
-				else
-					LockedSailDir = nil
-				end
-			end)
-		else
-			LockedSailDir = nil
-			pcall(function()
-				local char = LocalPlayer.Character
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				if hum and hum.SeatPart then
-					clearBoatMover(hum.SeatPart)
-					if hum.SeatPart:IsA("VehicleSeat") then
-						hum.SeatPart.Throttle = 0
-						hum.SeatPart.Steer = 0
-					end
-				end
-			end)
-			StatusLabel.Text = "●  Status: Ready"
-			StatusLabel.TextColor3 = TextMuted
 		end
 	end)
-	createToggle(Container1, "Boat Noclip (Rocks)", 38, false, function(state) BoatNoclipEnabled = state end)
-	createToggle(Container1, "Auto Chest (All Map)", 76, false, function(state)
-		AutoChestEnabled = state
-		if not state then
-			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
-			StatusLabel.Text = "●  Status: Ready"
-			StatusLabel.TextColor3 = TextMuted
-		end
-	end)
-	createToggle(Container1, "Boat Speed Boost", 114, false, function(state)
-		BoatSpeedEnabled = state
-		if not state then
-			pcall(function()
-				local char = LocalPlayer.Character
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				if hum and hum.SeatPart then
-					clearBoatMover(hum.SeatPart)
-				end
-			end)
-		end
-	end)
+	return equipped
+end
 
-	createSlider(Container1, 152, "Boat Speed", 16, 1000, TargetBoatSpeed, function(val)
-		TargetBoatSpeed = val
-	end)
-
-	createToggle(Container2, "Auto Farm Mobs (Level Locked)", 0, false, function(state)
-		AutoQuestFarmEnabled = state
-		if state then
-			LockedFarmBracket = getBracketForLevel(getPlayerLevel())
-			StatusLabel.Text = "●  Farm: Active (" .. tostring(LockedFarmBracket.questText) .. ")"
-			StatusLabel.TextColor3 = AccentGlow
-		elseif not AutoQuestFarmEnabled then
-			LockedFarmBracket = nil
-		end
-		if not hasActiveTargetFarm() then
-			CurrentCombatTargetModel = nil
-			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
-			StatusLabel.Text = "●  Status: Ready"
-			StatusLabel.TextColor3 = TextMuted
-		end
-	end)
-	createToggle(Container2, "Farm Vampire (Fangs)", 38, false, function(state)
-		FarmVampireEnabled = state
-		if not hasActiveTargetFarm() then
-			CurrentCombatTargetModel = nil
-			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
-		end
-	end)
-	createToggle(Container2, "Farm Demonic Soul", 76, false, function(state)
-		FarmDemonicSoulEnabled = state
-		if not hasActiveTargetFarm() then
-			CurrentCombatTargetModel = nil
-			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
-		end
-	end)
-	createToggle(Container2, "Auto farm dragon scale", 114, false, function(state)
-		FarmDragonScaleEnabled = state
-		if not hasActiveTargetFarm() then
-			CurrentCombatTargetModel = nil
-			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
-		end
-	end)
-	createToggle(Container2, "Auto Farm Bones", 152, false, function(state)
-		FarmBonesEnabled = state
-		if not hasActiveTargetFarm() then
-			CurrentCombatTargetModel = nil
-			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
-		end
-	end)
-
-	local _, weaponModeBtn = createActionButton(Container2, "Farm Weapon (Melee/Fruit/Sword/Gun)", SelectedFarmWeapon, 190, function(btn)
-		WeaponModeIndex = (WeaponModeIndex % #WeaponModes) + 1
-		SelectedFarmWeapon = WeaponModes[WeaponModeIndex]
-		btn.Text = SelectedFarmWeapon
-		equipSelectedWeapon(SelectedFarmWeapon)
-		StatusLabel.Text = "●  Farm Weapon: " .. SelectedFarmWeapon
-		StatusLabel.TextColor3 = AccentGlow
-	end)
-	if weaponModeBtn then
-		weaponModeBtn.Text = SelectedFarmWeapon
-	end
-
-	createToggle(Container2, "Bring Mobs Under You", 228, false, function(state)
-		BringMobsEnabled = state
-	end)
-	createToggle(Container2, "Auto Quest (Level Based)", 266, true, function(state)
-		AutoQuestEnabled = state
-	end)
-	createToggle(Container2, "Fast Attack", 304, true, function(state)
-		FastAttackEnabled = state
-	end)
-	createSlider(Container2, 342, "Farm Fly Speed", 60, 800, FlySpeed, function(val)
-		FlySpeed = val
-	end)
-
-	createToggle(Container3, "Walk Speed Boost", 0, false, function(state)
-		WalkSpeedEnabled = state
-		pcall(function()
-			local char = LocalPlayer.Character
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			if hum then
-				hum.WalkSpeed = state and TargetWalkSpeed or 16
-			end
-		end)
-	end)
-	createSlider(Container3, 38, "Walk Speed", 16, 350, TargetWalkSpeed, function(val)
-		TargetWalkSpeed = val
-		if WalkSpeedEnabled then
-			pcall(function()
-				local char = LocalPlayer.Character
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				if hum then
-					hum.WalkSpeed = val
-				end
-			end)
-		end
-	end)
-	createToggle(Container3, "Walk On Water", 88, false, function(state)
-		WalkOnWaterEnabled = state
-		if not state then
-			ensureWalkOnWaterPart(nil)
-		end
-	end)
-	createToggle(Container3, "Auto Haki (Buso)", 126, true, function(state)
-		AutoHakiEnabled = state
-	end)
-	createToggle(Container3, "Anti AFK", 164, true, function(state)
-		AntiAFKEnabled = state
-	end)
-	createToggle(Container3, "Auto Attack Sea Beast / Shark", 202, false, function(state)
-		AutoAttackSeaEnabled = state
-	end)
-
-	createToggle(Container4, "ESP (Players & Sea)", 0, false, function(state) ESPEnabled = state end)
-	createToggle(Container4, "ESP (Chests)", 38, false, function(state) ChestESPEnabled = state end)
-	createToggle(Container4, "Remove Fog", 76, false, function(state)
-		RemoveFogEnabled = state
-		if state then
-			clearSeaFog()
-		else
-			restoreOriginalFogState()
-		end
-	end)
-
-	createToggle(Container5, "Auto Kill Target", 0, false, function(state)
-		PvPEnabled = state
-		if not state then
-			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
-			if not AimBotEnabled then
-				StatusLabel.Text = "●  Status: Ready"
-				StatusLabel.TextColor3 = TextMuted
-			end
-		end
-	end)
-
-	createToggle(Container5, "Aim Bot", 38, false, function(state)
-		AimBotEnabled = state
-		if not state and not PvPEnabled then
-			StatusLabel.Text = "●  Status: Ready"
-			StatusLabel.TextColor3 = TextMuted
-		end
-	end)
-
-	local TargetCard = Instance.new("Frame")
-	TargetCard.Size = UDim2.new(1, -6, 0, 34)
-	TargetCard.Position = UDim2.new(0, 2, 0, 76)
-	TargetCard.BackgroundColor3 = CardDark
-	TargetCard.BorderSizePixel = 0
-	TargetCard.Parent = Container5
-	Instance.new("UICorner", TargetCard).CornerRadius = UDim.new(0, 8)
-	local targetStroke = Instance.new("UIStroke", TargetCard)
-	targetStroke.Color = Color3.fromRGB(42, 36, 64)
-	targetStroke.Thickness = 1
-
-	TargetLabel = Instance.new("TextLabel")
-	TargetLabel.Size = UDim2.new(1, -86, 1, 0)
-	TargetLabel.Position = UDim2.new(0, 10, 0, 0)
-	TargetLabel.BackgroundTransparency = 1
-	TargetLabel.Text = "Target: None"
-	TargetLabel.TextColor3 = TextMain
-	TargetLabel.Font = Enum.Font.GothamSemibold
-	TargetLabel.TextSize = 10
-	TargetLabel.TextXAlignment = Enum.TextXAlignment.Left
-	TargetLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	TargetLabel.Parent = TargetCard
-
-	NextTargetBtn = Instance.new("TextButton")
-	NextTargetBtn.Size = UDim2.new(0, 68, 0, 22)
-	NextTargetBtn.Position = UDim2.new(1, -74, 0.5, -11)
-	NextTargetBtn.BackgroundColor3 = ThemeColor
-	NextTargetBtn.Text = "Next Player"
-	NextTargetBtn.TextColor3 = Color3.new(1, 1, 1)
-	NextTargetBtn.Font = Enum.Font.GothamBold
-	NextTargetBtn.TextSize = 9.5
-	NextTargetBtn.Parent = TargetCard
-	Instance.new("UICorner", NextTargetBtn).CornerRadius = UDim.new(0, 6)
-
-	createSlider(Container5, 116, "PvP Follow Speed", 80, 900, PvPSpeed, function(val)
-		PvPSpeed = val
-	end)
-
-	PlayerListFrame = Instance.new("ScrollingFrame")
-	PlayerListFrame.Size = UDim2.new(1, -6, 0, 102)
-	PlayerListFrame.Position = UDim2.new(0, 2, 0, 164)
-	PlayerListFrame.BackgroundColor3 = CardDark
-	PlayerListFrame.BorderSizePixel = 0
-	PlayerListFrame.ScrollBarThickness = 2
-	PlayerListFrame.ScrollBarImageColor3 = ThemeColor
-	PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-	PlayerListFrame.Parent = Container5
-	Instance.new("UICorner", PlayerListFrame).CornerRadius = UDim.new(0, 8)
-	local listStroke = Instance.new("UIStroke", PlayerListFrame)
-	listStroke.Color = Color3.fromRGB(42, 36, 64)
-	listStroke.Thickness = 1
-
-	createToggle(Container6, "Auto Get Fruits", 0, false, function(state)
-		AutoGetFruitsEnabled = state
-		if not state then
-			clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
-			StatusLabel.Text = "●  Status: Ready"
-			StatusLabel.TextColor3 = TextMuted
-		end
-	end)
-
-	createToggle(Container6, "ESP Fruits", 38, false, function(state)
-		FruitESPEnabled = state
-	end)
-
-	createToggle(Container6, "Auto Store Fruit", 76, false, function(state)
-		AutoStoreFruitEnabled = state
-	end)
-
-	createToggle(Container6, "Auto Roll Fruit", 114, false, function(state)
-		AutoRollFruitEnabled = state
-	end)
-
-	for i, styleEntry in ipairs(FightingStylesList) do
-		createActionButton(Container7, styleEntry.name, "Buy", (i - 1) * 38, function()
-			purchaseFightingStyle(styleEntry)
-		end)
-	end
-
-	local function selectPvPPlayer(plr)
-		SelectedPvPPlayer = plr
-		if plr and plr.Parent then
-			TargetLabel.Text = "Target: " .. tostring(plr.Name)
-			TargetLabel.TextColor3 = AccentGlow
-		else
-			TargetLabel.Text = "Target: None"
-			TargetLabel.TextColor3 = TextMuted
-		end
-	end
-
-	local function refreshPlayerList()
-		pcall(function()
-			for _, child in ipairs(PlayerListFrame:GetChildren()) do
-				if child:IsA("TextButton") then
-					pcall(function() child:Destroy() end)
-				end
-			end
-
-			local others = {}
-			for _, p in ipairs(Players:GetPlayers()) do
-				if p ~= LocalPlayer then
-					table.insert(others, p)
-				end
-			end
-
-			if SelectedPvPPlayer and (not SelectedPvPPlayer.Parent or SelectedPvPPlayer == LocalPlayer) then
-				SelectedPvPPlayer = others[1]
-				selectPvPPlayer(SelectedPvPPlayer)
-			elseif not SelectedPvPPlayer and #others > 0 then
-				selectPvPPlayer(others[1])
-			end
-
-			for i, p in ipairs(others) do
-				local btn = Instance.new("TextButton")
-				btn.Size = UDim2.new(1, -10, 0, 24)
-				btn.Position = UDim2.new(0, 5, 0, 4 + ((i - 1) * 28))
-				local isSel = (p == SelectedPvPPlayer)
-				btn.BackgroundColor3 = isSel and ThemeColor or Color3.fromRGB(26, 22, 42)
-				btn.Text = (isSel and "▶ " or "") .. tostring(p.Name)
-				btn.TextColor3 = isSel and Color3.new(1, 1, 1) or TextMain
-				btn.Font = Enum.Font.GothamSemibold
-				btn.TextSize = 9.5
-				btn.TextXAlignment = Enum.TextXAlignment.Left
-				btn.Parent = PlayerListFrame
-				Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-
-				btn.MouseButton1Click:Connect(function()
-					selectPvPPlayer(p)
-					refreshPlayerList()
-				end)
-			end
-
-			PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(20, 8 + (#others * 28)))
-		end)
-	end
-
-	NextTargetBtn.MouseButton1Click:Connect(function()
-		local others = {}
-		for _, p in ipairs(Players:GetPlayers()) do
-			if p ~= LocalPlayer then
-				table.insert(others, p)
-			end
-		end
-		if #others == 0 then
-			selectPvPPlayer(nil)
-			refreshPlayerList()
-			return
-		end
-		local nextIdx = 1
-		for i, p in ipairs(others) do
-			if p == SelectedPvPPlayer then
-				nextIdx = (i % #others) + 1
-				break
-			end
-		end
-		selectPvPPlayer(others[nextIdx])
-		refreshPlayerList()
-	end)
-
-	Players.PlayerAdded:Connect(function()
-		task.wait(0.2)
-		refreshPlayerList()
-	end)
-	Players.PlayerRemoving:Connect(function(plr)
-		if plr == SelectedPvPPlayer then
-			SelectedPvPPlayer = nil
-		end
-		refreshPlayerList()
-	end)
-	refreshPlayerList()
-
-	UserInputService.InputBegan:Connect(function(input, gameProcessed)
-		if not gameProcessed and input.KeyCode == Enum.KeyCode.RightShift then
-			MainFrame.Visible = not MainFrame.Visible
-			OpenPill.Visible = not MainFrame.Visible
-		end
-	end)
-end)
-
-runStep("CharacterGuards", function()
-	local function bindWalkSpeedGuard(char)
-		pcall(function()
-			if not char then
-				return
-			end
-			local hum = char:WaitForChild("Humanoid", 5)
-			if hum then
-				hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-					if ScriptRunning and WalkSpeedEnabled and hum.WalkSpeed ~= TargetWalkSpeed then
-						hum.WalkSpeed = TargetWalkSpeed
-					end
-				end)
-				if WalkSpeedEnabled then
-					hum.WalkSpeed = TargetWalkSpeed
-				end
-			end
-		end)
-	end
-
-	if LocalPlayer.Character then
-		bindWalkSpeedGuard(LocalPlayer.Character)
-	end
-	LocalPlayer.CharacterAdded:Connect(bindWalkSpeedGuard)
-end)
-
-runStep("Loops", function()
-	local function hasActiveQuest()
-		local pg = LocalPlayer:FindFirstChild("PlayerGui")
-		local main = pg and pg:FindFirstChild("Main")
-		local questFrame = main and main:FindFirstChild("Quest")
-		return (questFrame and questFrame.Visible) == true
-	end
-
-	local function storeFruitsInInventory()
-		local now = tick()
-		if (now - LastStoreTick) < 1.2 then
-			return
-		end
-		LastStoreTick = now
-		local commf = getCommF()
-		local containers = {LocalPlayer:FindFirstChild("Backpack"), LocalPlayer.Character}
-		for _, cont in ipairs(containers) do
-			if cont then
-				for _, item in ipairs(cont:GetChildren()) do
-					local resolvedFruit = item:IsA("Tool") and resolveBloxFruitName(item.Name) or nil
-					if resolvedFruit then
-						local fruitKey = getStoreFruitKey(item, resolvedFruit)
-						if commf then
-							invokeOrFireRemote(commf, "StoreFruit", fruitKey, item)
-							invokeOrFireRemote(commf, "StoreFruit", resolvedFruit, item)
-						end
-					end
-				end
-			end
-		end
-	end
-
-	local function tryAutoRollFruit()
-		local now = tick()
-		if (now - LastRollTick) < 2.2 then
-			return
-		end
-		LastRollTick = now
-		local commf = getCommF()
-		if commf then
-			invokeOrFireRemote(commf, "Censor")
-			invokeOrFireRemote(commf, "RollFruit")
-		end
-	end
-
-	local function getNearestDroppedFruit(myPos)
-		local bestObj, bestPart, bestDist, bestName = nil, nil, math.huge, nil
-		for _, obj in ipairs(Workspace:GetChildren()) do
-			if isPickupableFruitInstance(obj) then
-				local part = getFruitAnchorPart(obj)
-				if part and part.Parent then
-					local d = (myPos - part.Position).Magnitude
-					if d < bestDist then
-						bestDist = d
-						bestObj = obj
-						bestPart = part
-						bestName = resolveBloxFruitName(obj.Name) or obj.Name
-					end
-				end
-			end
-		end
-		return bestObj, bestPart, bestDist, bestName
-	end
-
-	local function triggerWorldInteract(targetContainer)
-		if not targetContainer then
-			return
-		end
-		for _, desc in ipairs(targetContainer:GetDescendants()) do
-			if desc:IsA("ProximityPrompt") then
-				if type(fireproximityprompt) == "function" then
-					safeCall(fireproximityprompt, desc)
-				elseif type(desc.InputHoldBegin) == "function" then
-					pcall(function()
-						desc:InputHoldBegin()
-						task.wait(0.05)
-						if type(desc.InputHoldEnd) == "function" then
-							desc:InputHoldEnd()
-						end
-					end)
-				end
-			elseif desc:IsA("ClickDetector") then
-				if type(fireclickdetector) == "function" then
-					safeCall(fireclickdetector, desc)
-				end
-			end
-		end
-	end
-
+local function purchaseFightingStyle(styleEntry)
+	StatusLabel.Text = "●  Shop: Buying " .. tostring(styleEntry.name) .. "..."
+	StatusLabel.TextColor3 = AccentGlow
 	task.spawn(function()
-		while ScriptRunning do
-			task.wait(0.1)
-			if AutoGetFruitsEnabled then
-				local char = LocalPlayer.Character
-				local root = char and char:FindFirstChild("HumanoidRootPart")
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				if root and hum and hum.Health > 0 then
-					local fruitObj, fruitPart, dist, fruitLabel = getNearestDroppedFruit(root.Position)
-					if fruitObj and fruitPart and fruitPart.Parent then
-						StatusLabel.Text = "●  Fruit: " .. tostring(fruitLabel) .. " [" .. tostring(math.floor(dist)) .. "m]"
-						StatusLabel.TextColor3 = FruitColor
-
-						local goalCF = fruitPart.CFrame + Vector3.new(0, 1.5, 0)
-						moveToTarget(root, goalCF, FlySpeed)
-
-						if (root.Position - goalCF.Position).Magnitude <= 6 then
-							root.CFrame = goalCF
-							triggerWorldInteract(fruitObj)
-						end
-					else
-						StatusLabel.Text = "●  Auto Get Fruits: Scanning Blox Fruits..."
-						StatusLabel.TextColor3 = AccentGlow
-					end
+		pcall(function()
+			local commf = getCommF()
+			if commf then
+				for _, argPack in ipairs(styleEntry.calls or {}) do
+					invokeOrFireRemote(commf, table.unpack(argPack))
+					task.wait(0.14)
 				end
 			end
-
-			if AutoStoreFruitEnabled then
-				storeFruitsInInventory()
+			task.wait(0.35)
+			if equipMatchingFightingStyle(styleEntry) then
+				StatusLabel.Text = "●  Shop: Equipped " .. tostring(styleEntry.name)
+				StatusLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
+			else
+				StatusLabel.Text = "●  Shop: Sent Buy (" .. tostring(styleEntry.name) .. ")"
+				StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
 			end
-
-			if AutoRollFruitEnabled then
-				tryAutoRollFruit()
-			end
-		end
+		end)
 	end)
+end
 
-	local function getAimTargetPart(myRoot)
-		local targetPlr = SelectedPvPPlayer
-		if targetPlr and targetPlr.Parent and targetPlr ~= LocalPlayer then
-			local tChar = targetPlr.Character
-			local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
-			local tPart = tChar and (tChar:FindFirstChild("Head") or tChar:FindFirstChild("HumanoidRootPart"))
-			if tHum and tHum.Health > 0 and tPart then
-				return tPart, targetPlr.Name
-			end
-		end
+local function strikeEnemy(char, targetRoot)
+	local now = tick()
+	local cooldown = FastAttackEnabled and 0.04 or 0.16
+	if (now - LastHitTick) < cooldown then return end
+	LastHitTick = now
+	triggerAutoHaki()
 
-		if not myRoot then
-			return nil, nil
-		end
-
-		local bestPart, bestName, bestDist = nil, nil, math.huge
-		for _, p in ipairs(Players:GetPlayers()) do
-			if p ~= LocalPlayer and p.Character then
-				local pHum = p.Character:FindFirstChildOfClass("Humanoid")
-				local pPart = p.Character:FindFirstChild("Head") or p.Character:FindFirstChild("HumanoidRootPart")
-				if pHum and pHum.Health > 0 and pPart then
-					local d = (myRoot.Position - pPart.Position).Magnitude
-					if d < bestDist then
-						bestDist = d
-						bestPart = pPart
-						bestName = p.Name
-					end
-				end
-			end
-		end
-		return bestPart, bestName
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local tool = char and char:FindFirstChildOfClass("Tool")
+	if not tool or not toolMatchesCategory(tool, SelectedFarmWeapon) then
+		equipSelectedWeapon(SelectedFarmWeapon)
+		tool = char and char:FindFirstChildOfClass("Tool")
 	end
 
-	local function applyAimBot(root)
-		if not AimBotEnabled or not root then
-			return
-		end
-		local aimPart, aimName = getAimTargetPart(root)
-		if aimPart and Camera then
-			Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, aimPart.Position)
-			local flatLook = CFrame.lookAt(root.Position, Vector3.new(aimPart.Position.X, root.Position.Y, aimPart.Position.Z))
-			root.CFrame = CFrame.new(root.Position) * flatLook.Rotation
-			if not PvPEnabled and not AutoGetFruitsEnabled then
-				StatusLabel.Text = "●  Aim Bot: " .. tostring(aimName)
-				StatusLabel.TextColor3 = AccentGlow
-			end
-		end
-	end
-
-	local function strikeEnemy(char)
-		local now = tick()
-		if (now - LastHitTick) < (FastAttackEnabled and 0.08 or 0.18) then
-			return
-		end
-		LastHitTick = now
-		triggerAutoHaki()
-
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		local tool = char and char:FindFirstChildOfClass("Tool")
-		if not tool or not toolMatchesCategory(tool, SelectedFarmWeapon) then
-			equipBestCombatTool()
-			tool = char and char:FindFirstChildOfClass("Tool")
-		end
-		if hum and hum.Health > 0 and tool and tool:IsA("Tool") then
+	if hum and hum.Health > 0 and tool and tool:IsA("Tool") then
+		pcall(function()
 			if type(tool.Activate) == "function" then
 				tool:Activate()
 			end
-			local vp = Camera and Camera.ViewportSize or Vector2.new(1280, 720)
-			local cx, cy = vp.X * 0.5, vp.Y * 0.5
-			if VirtualInputManager then
+		end)
+
+		local combatRemote = getCombatRemote()
+		if combatRemote and targetRoot and targetRoot.Parent then
+			pcall(function()
+				combatRemote:FireServer(targetRoot.Position, {targetRoot})
+			end)
+		end
+
+		local vp = Camera and Camera.ViewportSize or Vector2.new(1280, 720)
+		local cx, cy = vp.X * 0.5, vp.Y * 0.5
+		if VirtualInputManager then
+			pcall(function()
 				VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
 				VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
-			end
-			if VirtualUser then
+			end)
+		end
+		if VirtualUser then
+			pcall(function()
 				VirtualUser:CaptureController()
 				VirtualUser:ClickButton1(Vector2.new(cx, cy))
-			end
-			if type(mouse1click) == "function" then
-				mouse1click()
-			end
+			end)
+		end
+		if type(mouse1click) == "function" then
+			pcall(mouse1click)
 		end
 	end
+end
 
-	local function triggerAutoClickerHit(char)
-		strikeEnemy(char)
+createToggle(Container1, "Auto Farm Mobs (Level Locked)", 0, false, function(state)
+	AutoFarmEnabled = state
+	if state then
+		LockedFarmBracket = getBracketForLevel(getPlayerLevel())
+	elseif not hasActiveTargetFarm() then
+		LockedFarmBracket = nil
+		clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+		StatusLabel.Text = "●  Status: Ready"
+		StatusLabel.TextColor3 = TextMuted
 	end
+end)
 
-	local function triggerHit(char)
-		strikeEnemy(char)
+createToggle(Container1, "Farm Vampire (Fangs)", 38, false, function(state)
+	FarmVampireEnabled = state
+	if not hasActiveTargetFarm() then
+		clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
 	end
+end)
 
-	task.spawn(function()
-		while ScriptRunning do
-			task.wait(0.05)
-			if PvPEnabled or AimBotEnabled then
-				local char = LocalPlayer.Character
-				local root = char and char:FindFirstChild("HumanoidRootPart")
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				if root and hum and hum.Health > 0 then
-					if AimBotEnabled then
-						applyAimBot(root)
-					end
-
-					if PvPEnabled then
-						local targetPlr = SelectedPvPPlayer
-						if not targetPlr or not targetPlr.Parent or targetPlr == LocalPlayer then
-							StatusLabel.Text = "●  PvP: Select a Player"
-							StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-						else
-							local tChar = targetPlr.Character
-							local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-							local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
-							if not tRoot or not tHum or tHum.Health <= 0 then
-								StatusLabel.Text = "●  PvP: Waiting for " .. tostring(targetPlr.Name)
-								StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-							else
-								equipBestCombatTool()
-								StatusLabel.Text = "●  PvP Auto-Click: " .. tostring(targetPlr.Name) .. " [" .. tostring(math.floor(tHum.Health)) .. " HP]"
-								StatusLabel.TextColor3 = EnemyColor
-
-								local stickPos = tRoot.CFrame * CFrame.new(0, 0, 3.0)
-								local goalCF = CFrame.lookAt(stickPos.Position, tRoot.Position)
-								moveToTarget(root, goalCF, PvPSpeed)
-
-								if Camera and (root.Position - goalCF.Position).Magnitude <= 12 then
-									Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
-								end
-
-								if (root.Position - tRoot.Position).Magnitude <= 25 then
-									triggerAutoClickerHit(char)
-								end
-							end
-						end
-					end
-				end
-			end
-		end
-	end)
-
-	local function tryTakeBracketQuest(root, bracket)
-		if not AutoQuestEnabled or not bracket then
-			return
-		end
-		local commf = getCommF()
-		if commf and bracket.questName then
-			invokeOrFireRemote(commf, "StartQuest", bracket.questName, bracket.questNum or 1)
-		end
+createToggle(Container1, "Farm Demonic Soul", 76, false, function(state)
+	FarmDemonicSoulEnabled = state
+	if not hasActiveTargetFarm() then
+		clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
 	end
+end)
 
-	local function getNearestByPredicate(myPos, predicate)
-		local enemiesFolder = Workspace:FindFirstChild("Enemies")
-		if not enemiesFolder then
-			return nil, nil, nil
-		end
-
-		local bestEnemy, bestRoot, bestHum, bestDist = nil, nil, nil, math.huge
-		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-			if enemy:IsA("Model") and predicate(enemy) then
-				local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
-				local eHum = enemy:FindFirstChildOfClass("Humanoid")
-				if eRoot and eHum and eHum.Health > 0 then
-					local dist = (myPos - eRoot.Position).Magnitude
-					if dist < bestDist then
-						bestDist = dist
-						bestEnemy = enemy
-						bestRoot = eRoot
-						bestHum = eHum
-					end
-				end
-			end
-		end
-		return bestEnemy, bestRoot, bestHum
+createToggle(Container1, "Auto Farm Dragon Scale", 114, false, function(state)
+	FarmDragonScaleEnabled = state
+	if not hasActiveTargetFarm() then
+		clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
 	end
+end)
 
-	local function getBracketEnemy(myPos, bracket)
-		local enemiesFolder = Workspace:FindFirstChild("Enemies")
-		if not enemiesFolder then
-			return nil, nil, nil
-		end
-
-		local bestEnemy, bestRoot, bestHum, bestDist = nil, nil, nil, math.huge
-		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-			if enemy:IsA("Model") then
-				local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
-				local eHum = enemy:FindFirstChildOfClass("Humanoid")
-				if eRoot and eHum and eHum.Health > 0 then
-					local matched = bracket and enemyMatchesBracket(enemy, bracket) or false
-					local dist = (myPos - eRoot.Position).Magnitude
-					if matched and dist < bestDist then
-						bestDist = dist
-						bestEnemy = enemy
-						bestRoot = eRoot
-						bestHum = eHum
-					end
-				end
-			end
-		end
-		if bestEnemy then
-			return bestEnemy, bestRoot, bestHum
-		end
-
-		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-			if enemy:IsA("Model") then
-				local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
-				local eHum = enemy:FindFirstChildOfClass("Humanoid")
-				if eRoot and eHum and eHum.Health > 0 then
-					local dist = (myPos - eRoot.Position).Magnitude
-					if dist < bestDist then
-						bestDist = dist
-						bestEnemy = enemy
-						bestRoot = eRoot
-						bestHum = eHum
-					end
-				end
-			end
-		end
-		return bestEnemy, bestRoot, bestHum
+createToggle(Container1, "Auto Farm Bones", 152, false, function(state)
+	FarmBonesEnabled = state
+	if not hasActiveTargetFarm() then
+		clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
 	end
+end)
 
-	local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, activeBracket)
-		if not BringMobsEnabled or not mainEnemyRoot then
-			return
-		end
-		local now = tick()
-		if (now - LastBringTick) < 0.16 then
-			return
-		end
-		LastBringTick = now
-		local enemiesFolder = Workspace:FindFirstChild("Enemies")
-		if not enemiesFolder then
-			return
-		end
-		local stackPos = mainEnemyRoot.Position - Vector3.new(0, 2, 0)
-		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-			if enemy:IsA("Model") and (not activeBracket or enemyMatchesBracket(enemy, activeBracket)) then
-				local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
-				local eHum = enemy:FindFirstChildOfClass("Humanoid")
-				if eRoot and eHum and eHum.Health > 0 and eRoot ~= mainEnemyRoot then
-					local dist = (centerPos - eRoot.Position).Magnitude
-					if dist <= math.min(BringRadius, 140) then
-						pcall(function()
-							eRoot.CanCollide = false
-							eRoot.Anchored = false
-							eRoot.AssemblyLinearVelocity = Vector3.zero
-							eRoot.AssemblyAngularVelocity = Vector3.zero
-							eRoot.CFrame = CFrame.new(stackPos)
-						end)
-					end
-				end
-			end
-		end
-	end
+local _, weaponBtn = createActionButton(Container1, "Farm Weapon", SelectedFarmWeapon, 190, function(btn)
+	WeaponModeIndex = (WeaponModeIndex % #WeaponModes) + 1
+	SelectedFarmWeapon = WeaponModes[WeaponModeIndex]
+	btn.Text = SelectedFarmWeapon
+	equipSelectedWeapon(SelectedFarmWeapon)
+end)
 
-	local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefix, statusColor, activeBracket)
-		if targetEnemy and tRoot and tHum and tHum.Health > 0 then
-			CurrentCombatTargetModel = targetEnemy
-			local reqTag = activeBracket and (" [Lv." .. tostring(activeBracket.minLvl) .. "-" .. tostring(activeBracket.maxLvl) .. "]") or ""
-			StatusLabel.Text = "●  " .. statusPrefix .. " [" .. SelectedFarmWeapon .. "]: " .. tostring(targetEnemy.Name) .. " (" .. tostring(math.floor(tHum.Health)) .. " HP)" .. reqTag
-			StatusLabel.TextColor3 = statusColor
+createToggle(Container1, "Bring Mobs Under You", 228, true, function(state) BringMobsEnabled = state end)
+createToggle(Container1, "Auto Quest (Level Based)", 266, true, function(state) AutoQuestEnabled = state end)
+createToggle(Container1, "Fast Attack", 304, true, function(state) FastAttackEnabled = state end)
+createSlider(Container1, 342, "Farm Fly Speed", 60, 800, FlySpeed, function(val) FlySpeed = val end)
 
-			local hoverHeight = (SelectedFarmWeapon == "Gun") and 10 or 7
-			local targetPos = tRoot.Position + Vector3.new(0, hoverHeight, 0)
-			local lookCF = CFrame.lookAt(targetPos, tRoot.Position)
-			moveToTarget(root, lookCF, FlySpeed)
-
-			if (root.Position - tRoot.Position).Magnitude <= 75 then
-				bringMobsUnderPlayer(root.Position, tRoot, activeBracket)
-				triggerHit(char)
-			end
-			return true
-		end
-		CurrentCombatTargetModel = nil
-		return false
-	end
-
-	task.spawn(function()
-		while ScriptRunning do
-			task.wait(0.05)
-			if hasActiveTargetFarm() then
-				local char = LocalPlayer.Character
-				local root = char and char:FindFirstChild("HumanoidRootPart")
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				if root and hum and hum.Health > 0 then
-					local myLvl = getPlayerLevel()
-					equipBestCombatTool()
-
-					if FarmBonesEnabled then
-						local boneEnemy, bRoot, bHum = getNearestByPredicate(root.Position, isBoneEnemy)
-						if not farmTargetModel(char, root, boneEnemy, bRoot, bHum, "Bones Farm", Color3.fromRGB(226, 232, 240), nil) then
-							local castlePos = getHauntedCastleBonesPosition()
-							local distToCastle = (root.Position - castlePos).Magnitude
-							StatusLabel.Text = "●  Bones Farm: Moving [" .. tostring(math.floor(distToCastle)) .. "m]"
-							StatusLabel.TextColor3 = Color3.fromRGB(226, 232, 240)
-							moveToTarget(root, CFrame.new(castlePos), FlySpeed)
-						end
-					elseif FarmDragonScaleEnabled then
-						local scaleEnemy, sRoot, sHum = getNearestByPredicate(root.Position, isDragonScaleEnemy)
-						if not farmTargetModel(char, root, scaleEnemy, sRoot, sHum, "Dragon Scale Farm", Color3.fromRGB(249, 115, 22), nil) then
-							local hydraPos = getHydraDragonScalePosition()
-							local distToHydra = (root.Position - hydraPos).Magnitude
-							StatusLabel.Text = "●  Dragon Scale Farm: Moving [" .. tostring(math.floor(distToHydra)) .. "m]"
-							StatusLabel.TextColor3 = Color3.fromRGB(249, 115, 22)
-							moveToTarget(root, CFrame.new(hydraPos), FlySpeed)
-						end
-					elseif FarmVampireEnabled then
-						local vampEnemy, vRoot, vHum = getNearestByPredicate(root.Position, isVampireEnemy)
-						if not farmTargetModel(char, root, vampEnemy, vRoot, vHum, "Fangs Farm", Color3.fromRGB(244, 63, 94), nil) then
-							StatusLabel.Text = "●  Fangs Farm: Waiting Vampire Respawn..."
-							StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-						end
-					elseif FarmDemonicSoulEnabled then
-						local soulEnemy, sRoot, sHum = getNearestByPredicate(root.Position, isDemonicSoulEnemy)
-						if not farmTargetModel(char, root, soulEnemy, sRoot, sHum, "Demonic Soul Farm", Color3.fromRGB(192, 132, 252), nil) then
-							StatusLabel.Text = "●  Demonic Soul Farm: Waiting Respawn..."
-							StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-						end
-					elseif AutoQuestFarmEnabled then
-						if not LockedFarmBracket or myLvl > LockedFarmBracket.maxLvl or myLvl < LockedFarmBracket.minLvl then
-							LockedFarmBracket = getBracketForLevel(myLvl)
-						end
-
-						local bracket = LockedFarmBracket
-						local reqRangeText = "Lv." .. tostring(bracket.minLvl) .. "-" .. tostring(bracket.maxLvl)
-
-						if AutoQuestEnabled and not hasActiveQuest() and (tick() - LastQuestAttemptTick) > 2.5 then
-							LastQuestAttemptTick = tick()
-							tryTakeBracketQuest(root, bracket)
-						end
-
-						local mainEnemy, eRoot, eHum = getBracketEnemy(root.Position, bracket)
-						if not farmTargetModel(char, root, mainEnemy, eRoot, eHum, "Lv." .. tostring(myLvl) .. " | " .. bracket.questText, Color3.fromRGB(74, 222, 128), bracket) then
-							local spawnPos = getSpawnPositionForKeywords(bracket.keywords, HighDiscipleFallbackPos)
-							local distSpawn = (root.Position - spawnPos).Magnitude
-							StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Moving to Mobs [" .. reqRangeText .. "] [" .. tostring(math.floor(distSpawn)) .. "m]"
-							StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-							moveToTarget(root, CFrame.new(spawnPos), FlySpeed)
-						end
-					end
-				end
-			end
-		end
-	end)
-
-	local function getActiveSeaEvent(myPos)
-		for _, folderName in ipairs({"SeaBeasts", "Enemies", "Boats"}) do
-			local folder = Workspace:FindFirstChild(folderName)
-			if folder then
-				for _, obj in ipairs(folder:GetChildren()) do
-					if obj and isSeaEvent(obj.Name) then
-						local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
-						if part then
-							local dist = (myPos - part.Position).Magnitude
-							if dist < 2500 then
-								return obj.Name, math.floor(dist)
-							end
-						end
-					end
-				end
-			end
-		end
-		return nil, nil
-	end
-
-	local function getChestDisplayName(part)
-		if part and part.Parent and part.Parent ~= Workspace then
-			local pName = part.Parent.Name
-			for _, allowed in ipairs(AllowedChestNames) do
-				if string.lower(pName) == string.lower(allowed) then
-					return pName
-				end
-			end
-		end
-		return part and part.Name or "Chest"
-	end
-
-	local function isValidChestPart(part)
-		if not part or not part:IsA("BasePart") or not part.Parent then
-			return false
-		end
-		if part.Transparency >= 0.95 then
-			return false
-		end
-		local lowerName = string.lower(part.Name)
-		local parentLower = part.Parent and string.lower(part.Parent.Name) or ""
-		if string.find(lowerName, "hitbox") or string.find(lowerName, "trigger") then
-			return false
-		end
-		for _, allowed in ipairs(AllowedChestNames) do
-			local aLower = string.lower(allowed)
-			if lowerName == aLower or parentLower == aLower then
-				return true
-			end
-		end
-		return false
-	end
-
-	local function getNearestChest(myRoot)
-		local nearestPart, shortestDist = nil, math.huge
-		for _, obj in ipairs(Workspace:GetChildren()) do
-			if isValidChestPart(obj) then
-				local dist = (myRoot.Position - obj.Position).Magnitude
-				if dist < shortestDist then
-					shortestDist, nearestPart = dist, obj
-				end
-			elseif obj:IsA("Model") or obj:IsA("Folder") then
-				for _, child in ipairs(obj:GetChildren()) do
-					if isValidChestPart(child) then
-						local dist = (myRoot.Position - child.Position).Magnitude
-						if dist < shortestDist then
-							shortestDist, nearestPart = dist, child
-						end
-					end
-				end
-			end
-		end
-		return nearestPart, shortestDist
-	end
-
-	task.spawn(function()
-		while ScriptRunning do
-			task.wait(0.15)
-			if AutoAttackSeaEnabled then
-				local myChar = LocalPlayer.Character
-				local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-				local enemiesFolder = Workspace:FindFirstChild("Enemies")
-				if myRoot and enemiesFolder then
-					for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-						if enemy:IsA("Model") and isSeaEvent(enemy.Name) then
-							local eRoot = enemy:FindFirstChild("HumanoidRootPart")
-							local eHum = enemy:FindFirstChildOfClass("Humanoid")
-							if eRoot and eHum and eHum.Health > 0 and (myRoot.Position - eRoot.Position).Magnitude < 250 then
-								equipBestCombatTool()
-								triggerHit(myChar)
-								break
-							end
-						end
-					end
-				end
-			end
-		end
-	end)
-
-	task.spawn(function()
-		while ScriptRunning do
-			task.wait(0.1)
-			if AutoChestEnabled then
-				local char = LocalPlayer.Character
-				local root = char and char:FindFirstChild("HumanoidRootPart")
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				if root and hum and hum.Health > 0 then
-					local targetChest, dist = getNearestChest(root)
-					if targetChest and isValidChestPart(targetChest) then
-						StatusLabel.Text = "●  Chest: " .. tostring(getChestDisplayName(targetChest)) .. " [" .. tostring(math.floor(dist)) .. "m]"
-						StatusLabel.TextColor3 = ChestColor
-
-						local goalCF = targetChest.CFrame + Vector3.new(0, 2.5, 0)
-						moveToTarget(root, goalCF, FlySpeed)
-
-						if (root.Position - goalCF.Position).Magnitude <= 5 then
-							root.CFrame = goalCF
-							root.AssemblyLinearVelocity = Vector3.zero
-							task.wait(0.12)
-						end
-					else
-						StatusLabel.Text = "●  Auto Chest: Scanning..."
-						StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-					end
-				end
-			end
-		end
-	end)
-
-	task.spawn(function()
-		while ScriptRunning do
-			task.wait(0.08)
+createToggle(Container2, "Boat Noclip (Rocks)", 0, false, function(state) BoatNoclipEnabled = state end)
+createToggle(Container2, "Auto Chest (All Map)", 38, false, function(state) AutoChestEnabled = state end)
+createToggle(Container2, "Boat Speed Boost", 76, false, function(state) BoatSpeedEnabled = state end)
+createSlider(Container2, 114, "Boat Speed", 16, 1000, TargetBoatSpeed, function(val) TargetBoatSpeed = val end)
+createToggle(Container2, "Auto Attack Sea Beast / Shark", 164, false, function(state) AutoAttackSeaEnabled = state end)
+createToggle(Container2, "Auto Sail (Stop on Event)", 202, false, function(state)
+	AutoSailEnabled = state
+	if state then
+		pcall(function()
 			local char = LocalPlayer.Character
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			local root = char and char:FindFirstChild("HumanoidRootPart")
-
-			if AutoSailEnabled and hum and hum.SeatPart and root then
-				if not LockedSailDir then
-					LockedSailDir = captureStraightSailDirection(hum.SeatPart)
-				end
-				local seat = hum.SeatPart
-				local eventName, eventDist = getActiveSeaEvent(root.Position)
-
-				if eventName then
-					StatusLabel.Text = "●  EVENT: " .. tostring(eventName) .. " [" .. tostring(eventDist) .. "m]"
-					StatusLabel.TextColor3 = SeaBeastColor
-					clearBoatMover(seat)
-					if seat:IsA("VehicleSeat") then
-						seat.Throttle = 0
-						seat.Steer = 0
-					end
-				else
-					StatusLabel.Text = "●  Auto Sailing Straight (" .. tostring(TargetBoatSpeed) .. ")..."
-					StatusLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
-					applyLockedSailVelocity(seat, TargetBoatSpeed, LockedSailDir)
-				end
-			elseif AutoSailEnabled then
-				LockedSailDir = nil
-				StatusLabel.Text = "●  Sit in Boat Seat!"
-				StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-			else
-				LockedSailDir = nil
+			if hum and hum.SeatPart then
+				local look = hum.SeatPart.CFrame.LookVector
+				local flat = Vector3.new(look.X, 0, look.Z)
+				LockedSailDir = flat.Magnitude > 0.01 and flat.Unit or Vector3.new(0, 0, -1)
 			end
-		end
+		end)
+	else
+		LockedSailDir = nil
+	end
+end)
+
+createToggle(Container3, "Walk Speed Boost", 0, false, function(state)
+	WalkSpeedEnabled = state
+	pcall(function()
+		local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+		if hum then hum.WalkSpeed = state and TargetWalkSpeed or 16 end
 	end)
+end)
+createSlider(Container3, 38, "Walk Speed", 16, 350, TargetWalkSpeed, function(val) TargetWalkSpeed = val end)
+createToggle(Container3, "Walk On Water", 88, false, function(state)
+	WalkOnWaterEnabled = state
+	if not state then ensureWalkOnWaterPart(nil) end
+end)
+createToggle(Container3, "Auto Haki (Buso)", 126, true, function(state) AutoHakiEnabled = state end)
+createToggle(Container3, "Anti AFK", 164, true, function(state) AntiAFKEnabled = state end)
 
-	RunService.Stepped:Connect(function()
-		if not ScriptRunning then
-			return
-		end
-		local char = LocalPlayer.Character
-		if not char then
-			return
-		end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		local root = char:FindFirstChild("HumanoidRootPart")
+createToggle(Container4, "ESP (Players & Sea)", 0, false, function(state) ESPEnabled = state end)
+createToggle(Container4, "Remove Fog", 38, false, function(state)
+	RemoveFogEnabled = state
+	if state then clearSeaFog() else restoreOriginalFogState() end
+end)
 
-		if WalkOnWaterEnabled and root then
-			ensureWalkOnWaterPart(root.Position)
-		end
+createToggle(Container5, "Auto Kill Target", 0, false, function(state) PvPEnabled = state end)
+createToggle(Container5, "Aim Bot", 38, false, function(state) AimBotEnabled = state end)
 
-		if hum and WalkSpeedEnabled and hum.WalkSpeed ~= TargetWalkSpeed then
-			hum.WalkSpeed = TargetWalkSpeed
-		end
+local TargetLabel = Instance.new("TextLabel")
+TargetLabel.Size = UDim2.new(1, -92, 0, 28)
+TargetLabel.Position = UDim2.new(0, 8, 0, 78)
+TargetLabel.BackgroundColor3 = CardDark
+TargetLabel.Text = "Target: None"
+TargetLabel.TextColor3 = TextMain
+TargetLabel.Font = Enum.Font.GothamSemibold
+TargetLabel.TextSize = 10
+TargetLabel.Parent = Container5
+Instance.new("UICorner", TargetLabel).CornerRadius = UDim.new(0, 8)
 
-		if AutoSailEnabled and hum and hum.SeatPart and root and LockedSailDir then
-			local eventName = getActiveSeaEvent(root.Position)
-			if not eventName then
-				applyLockedSailVelocity(hum.SeatPart, TargetBoatSpeed, LockedSailDir)
+local NextTargetBtn = Instance.new("TextButton")
+NextTargetBtn.Size = UDim2.new(0, 76, 0, 28)
+NextTargetBtn.Position = UDim2.new(1, -80, 0, 78)
+NextTargetBtn.BackgroundColor3 = ThemeColor
+NextTargetBtn.Text = "Next Player"
+NextTargetBtn.TextColor3 = Color3.new(1, 1, 1)
+NextTargetBtn.Font = Enum.Font.GothamBold
+NextTargetBtn.TextSize = 9.5
+NextTargetBtn.Parent = Container5
+Instance.new("UICorner", NextTargetBtn).CornerRadius = UDim.new(0, 8)
+
+createSlider(Container5, 114, "PvP Follow Speed", 80, 900, PvPSpeed, function(val) PvPSpeed = val end)
+
+local PlayerListFrame = Instance.new("ScrollingFrame")
+PlayerListFrame.Size = UDim2.new(1, -6, 0, 102)
+PlayerListFrame.Position = UDim2.new(0, 2, 0, 162)
+PlayerListFrame.BackgroundColor3 = CardDark
+PlayerListFrame.ScrollBarThickness = 2
+PlayerListFrame.ScrollBarImageColor3 = ThemeColor
+PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+PlayerListFrame.Parent = Container5
+Instance.new("UICorner", PlayerListFrame).CornerRadius = UDim.new(0, 8)
+
+createToggle(Container6, "Auto Get Fruits", 0, false, function(state) AutoGetFruitsEnabled = state end)
+createToggle(Container6, "Auto Store Fruit", 38, false, function(state) AutoStoreFruitEnabled = state end)
+createToggle(Container6, "Auto Roll Fruit", 76, false, function(state) AutoRollFruitEnabled = state end)
+
+for i, styleEntry in ipairs(FightingStylesList) do
+	createActionButton(Container7, styleEntry.name, "Buy", (i - 1) * 38, function()
+		purchaseFightingStyle(styleEntry)
+	end)
+end
+
+local function selectPvPPlayer(plr)
+	SelectedPvPPlayer = plr
+	TargetLabel.Text = (plr and plr.Parent) and ("Target: " .. tostring(plr.Name)) or "Target: None"
+end
+
+local function refreshPlayerList()
+	pcall(function()
+		for _, child in ipairs(PlayerListFrame:GetChildren()) do
+			if child:IsA("TextButton") then child:Destroy() end
+		end
+		local others = {}
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LocalPlayer then table.insert(others, p) end
+		end
+		if not SelectedPvPPlayer or not SelectedPvPPlayer.Parent then
+			selectPvPPlayer(others[1])
+		end
+		for i, p in ipairs(others) do
+			local btn = Instance.new("TextButton")
+			btn.Size = UDim2.new(1, -10, 0, 24)
+			btn.Position = UDim2.new(0, 5, 0, 4 + ((i - 1) * 28))
+			local isSel = (p == SelectedPvPPlayer)
+			btn.BackgroundColor3 = isSel and ThemeColor or Color3.fromRGB(26, 22, 42)
+			btn.Text = (isSel and "▶ " or "") .. tostring(p.Name)
+			btn.TextColor3 = isSel and Color3.new(1, 1, 1) or TextMain
+			btn.Font = Enum.Font.GothamSemibold
+			btn.TextSize = 9.5
+			btn.TextXAlignment = Enum.TextXAlignment.Left
+			btn.Parent = PlayerListFrame
+			Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+			btn.MouseButton1Click:Connect(function()
+				selectPvPPlayer(p)
+				refreshPlayerList()
+			end)
+		end
+		PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(20, 8 + (#others * 28)))
+	end)
+end
+
+NextTargetBtn.MouseButton1Click:Connect(function()
+	local others = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer then table.insert(others, p) end
+	end
+	if #others == 0 then selectPvPPlayer(nil); refreshPlayerList(); return end
+	local nextIdx = 1
+	for i, p in ipairs(others) do
+		if p == SelectedPvPPlayer then nextIdx = (i % #others) + 1; break end
+	end
+	selectPvPPlayer(others[nextIdx])
+	refreshPlayerList()
+end)
+
+Players.PlayerAdded:Connect(function() task.wait(0.2); refreshPlayerList() end)
+Players.PlayerRemoving:Connect(function(plr)
+	if plr == SelectedPvPPlayer then SelectedPvPPlayer = nil end
+	refreshPlayerList()
+end)
+refreshPlayerList()
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if not gameProcessed and input.KeyCode == Enum.KeyCode.RightShift then
+		MainFrame.Visible = not MainFrame.Visible
+		OpenPill.Visible = not MainFrame.Visible
+	end
+end)
+
+local function hasActiveQuest()
+	local pg = LocalPlayer:FindFirstChild("PlayerGui")
+	local main = pg and pg:FindFirstChild("Main")
+	local questFrame = main and main:FindFirstChild("Quest")
+	return (questFrame and questFrame.Visible) == true
+end
+
+local function tryTakeBracketQuest(bracket)
+	if not AutoQuestEnabled or not bracket then return end
+	local commf = getCommF()
+	if commf and bracket.questName then
+		invokeOrFireRemote(commf, "StartQuest", bracket.questName, bracket.questNum or 1)
+	end
+end
+
+local function getNearestByPredicate(myPos, predicate)
+	local enemiesFolder = Workspace:FindFirstChild("Enemies")
+	if not enemiesFolder then return nil, nil, nil end
+	local bestEnemy, bestRoot, bestHum, bestDist = nil, nil, nil, math.huge
+	for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+		if enemy:IsA("Model") and predicate(enemy) then
+			local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
+			local eHum = enemy:FindFirstChildOfClass("Humanoid")
+			if eRoot and eHum and eHum.Health > 0 then
+				local dist = (myPos - eRoot.Position).Magnitude
+				if dist < bestDist then
+					bestDist, bestEnemy, bestRoot, bestHum = dist, enemy, eRoot, eHum
+				end
+			end
+		end
+	end
+	return bestEnemy, bestRoot, bestHum
+end
+
+local function getBracketEnemy(myPos, bracket)
+	local enemiesFolder = Workspace:FindFirstChild("Enemies")
+	if not enemiesFolder then return nil, nil, nil end
+	local bestEnemy, bestRoot, bestHum, bestDist = nil, nil, nil, math.huge
+	for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+		if enemy:IsA("Model") then
+			local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
+			local eHum = enemy:FindFirstChildOfClass("Humanoid")
+			if eRoot and eHum and eHum.Health > 0 and bracket and enemyMatchesBracket(enemy, bracket) then
+				local dist = (myPos - eRoot.Position).Magnitude
+				if dist < bestDist then
+					bestDist, bestEnemy, bestRoot, bestHum = dist, enemy, eRoot, eHum
+				end
+			end
+		end
+	end
+	if bestEnemy then return bestEnemy, bestRoot, bestHum end
+	for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+		if enemy:IsA("Model") then
+			local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
+			local eHum = enemy:FindFirstChildOfClass("Humanoid")
+			if eRoot and eHum and eHum.Health > 0 then
+				local dist = (myPos - eRoot.Position).Magnitude
+				if dist < bestDist then
+					bestDist, bestEnemy, bestRoot, bestHum = dist, enemy, eRoot, eHum
+				end
+			end
+		end
+	end
+	return bestEnemy, bestRoot, bestHum
+end
+
+local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, activeBracket)
+	if not BringMobsEnabled or not mainEnemyRoot then return end
+	local now = tick()
+	if (now - LastBringTick) < 0.16 then return end
+	LastBringTick = now
+	local enemiesFolder = Workspace:FindFirstChild("Enemies")
+	if not enemiesFolder then return end
+	local stackPos = mainEnemyRoot.Position - Vector3.new(0, 2, 0)
+	for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+		if enemy:IsA("Model") and (not activeBracket or enemyMatchesBracket(enemy, activeBracket)) then
+			local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
+			local eHum = enemy:FindFirstChildOfClass("Humanoid")
+			if eRoot and eHum and eHum.Health > 0 and eRoot ~= mainEnemyRoot then
+				if (centerPos - eRoot.Position).Magnitude <= BringRadius then
+					pcall(function()
+						eRoot.CanCollide = false
+						eRoot.Anchored = false
+						eRoot.AssemblyLinearVelocity = Vector3.zero
+						eRoot.AssemblyAngularVelocity = Vector3.zero
+						eRoot.CFrame = CFrame.new(stackPos)
+					end)
+				end
+			end
+		end
+	end
+end
+
+local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, prefix, color, activeBracket)
+	if targetEnemy and tRoot and tHum and tHum.Health > 0 then
+		StatusLabel.Text = "●  " .. prefix .. " [" .. SelectedFarmWeapon .. "]: " .. tostring(targetEnemy.Name) .. " (" .. tostring(math.floor(tHum.Health)) .. " HP)"
+		StatusLabel.TextColor3 = color
+		local hoverHeight = (SelectedFarmWeapon == "Gun") and 10 or 7
+		local targetPos = tRoot.Position + Vector3.new(0, hoverHeight, 0)
+		moveToTarget(root, CFrame.lookAt(targetPos, tRoot.Position), FlySpeed)
+		if (root.Position - tRoot.Position).Magnitude <= 75 then
+			bringMobsUnderPlayer(root.Position, tRoot, activeBracket)
+			strikeEnemy(char, tRoot)
+		end
+		return true
+	end
+	return false
+end
+
+task.spawn(function()
+	while ScriptRunning do
+		task.wait(0.05)
+		if hasActiveTargetFarm() then
+			local char = LocalPlayer.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if root and hum and hum.Health > 0 then
+				local myLvl = getPlayerLevel()
+				equipSelectedWeapon(SelectedFarmWeapon)
+
+				if FarmBonesEnabled then
+					local e, eRoot, eHum = getNearestByPredicate(root.Position, isBoneEnemy)
+					if not farmTargetModel(char, root, e, eRoot, eHum, "Bones", Color3.fromRGB(226, 232, 240), nil) then
+						moveToTarget(root, CFrame.new(getHauntedCastleBonesPosition()), FlySpeed)
+					end
+				elseif FarmDragonScaleEnabled then
+					local e, eRoot, eHum = getNearestByPredicate(root.Position, isDragonScaleEnemy)
+					if not farmTargetModel(char, root, e, eRoot, eHum, "Dragon Scale", Color3.fromRGB(249, 115, 22), nil) then
+						moveToTarget(root, CFrame.new(getHydraDragonScalePosition()), FlySpeed)
+					end
+				elseif FarmVampireEnabled then
+					local e, eRoot, eHum = getNearestByPredicate(root.Position, isVampireEnemy)
+					if not farmTargetModel(char, root, e, eRoot, eHum, "Vampire", EnemyColor, nil) then
+						StatusLabel.Text = "●  Vampire: Waiting Respawn..."
+						StatusLabel.TextColor3 = ChestColor
+					end
+				elseif FarmDemonicSoulEnabled then
+					local e, eRoot, eHum = getNearestByPredicate(root.Position, isDemonicSoulEnemy)
+					if not farmTargetModel(char, root, e, eRoot, eHum, "Demonic Soul", FruitColor, nil) then
+						StatusLabel.Text = "●  Demonic Soul: Waiting Respawn..."
+						StatusLabel.TextColor3 = ChestColor
+					end
+				elseif AutoFarmEnabled then
+					if not LockedFarmBracket or myLvl > LockedFarmBracket.maxLvl or myLvl < LockedFarmBracket.minLvl then
+						LockedFarmBracket = getBracketForLevel(myLvl)
+					end
+					local bracket = LockedFarmBracket
+					if AutoQuestEnabled and not hasActiveQuest() and (tick() - LastQuestAttemptTick) > 2.5 then
+						LastQuestAttemptTick = tick()
+						tryTakeBracketQuest(bracket)
+					end
+					local e, eRoot, eHum = getBracketEnemy(root.Position, bracket)
+					if not farmTargetModel(char, root, e, eRoot, eHum, "Lv." .. tostring(myLvl) .. " | " .. bracket.questText, Color3.fromRGB(74, 222, 128), bracket) then
+						local sp = getSpawnPositionForKeywords(bracket.keywords, HighDiscipleFallbackPos)
+						StatusLabel.Text = "●  Moving to " .. bracket.questText .. "..."
+						StatusLabel.TextColor3 = ChestColor
+						moveToTarget(root, CFrame.new(sp), FlySpeed)
+					end
+				end
+			end
+		end
+	end
+end)
+
+task.spawn(function()
+	while ScriptRunning do
+		task.wait(0.1)
+		if AutoGetFruitsEnabled then
+			local char = LocalPlayer.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			if root then
+				local bestPart, bestName, bestDist = nil, nil, math.huge
+				for _, obj in ipairs(Workspace:GetChildren()) do
+					if isPickupableFruitInstance(obj) then
+						local part = getFruitAnchorPart(obj)
+						if part and part.Parent then
+							local d = (root.Position - part.Position).Magnitude
+							if d < bestDist then
+								bestDist, bestPart, bestName = d, part, resolveBloxFruitName(obj.Name) or obj.Name
+							end
+						end
+					end
+				end
+				if bestPart then
+					StatusLabel.Text = "●  Fruit: " .. tostring(bestName) .. " [" .. tostring(math.floor(bestDist)) .. "m]"
+					StatusLabel.TextColor3 = FruitColor
+					moveToTarget(root, bestPart.CFrame + Vector3.new(0, 1.5, 0), FlySpeed)
+				end
 			end
 		end
 
-		local noclipActive = AutoChestEnabled or hasActiveTargetFarm() or PvPEnabled or AutoGetFruitsEnabled or (BoatNoclipEnabled and hum and hum.SeatPart)
+		if AutoStoreFruitEnabled and (tick() - LastStoreTick) >= 1.2 then
+			LastStoreTick = tick()
+			local commf = getCommF()
+			if commf then
+				for _, cont in ipairs({LocalPlayer:FindFirstChild("Backpack"), LocalPlayer.Character}) do
+					if cont then
+						for _, item in ipairs(cont:GetChildren()) do
+							local resolved = item:IsA("Tool") and resolveBloxFruitName(item.Name) or nil
+							if resolved then
+								invokeOrFireRemote(commf, "StoreFruit", getStoreFruitKey(item, resolved), item)
+								invokeOrFireRemote(commf, "StoreFruit", resolved, item)
+							end
+						end
+					end
+				end
+			end
+		end
 
-		if noclipActive then
-			for _, part in ipairs(char:GetChildren()) do
+		if AutoRollFruitEnabled and (tick() - LastRollTick) >= 2.2 then
+			LastRollTick = tick()
+			local commf = getCommF()
+			if commf then
+				invokeOrFireRemote(commf, "Censor")
+				invokeOrFireRemote(commf, "RollFruit")
+			end
+		end
+	end
+end)
+
+task.spawn(function()
+	while ScriptRunning do
+		task.wait(0.05)
+		if PvPEnabled or AimBotEnabled then
+			local char = LocalPlayer.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			local targetPlr = SelectedPvPPlayer
+			if root and targetPlr and targetPlr.Parent and targetPlr ~= LocalPlayer and targetPlr.Character then
+				local tRoot = targetPlr.Character:FindFirstChild("HumanoidRootPart")
+				local tHum = targetPlr.Character:FindFirstChildOfClass("Humanoid")
+				if tRoot and tHum and tHum.Health > 0 then
+					if AimBotEnabled and Camera then
+						Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
+					end
+					if PvPEnabled then
+						local goalCF = CFrame.lookAt((tRoot.CFrame * CFrame.new(0, 0, 3)).Position, tRoot.Position)
+						moveToTarget(root, goalCF, PvPSpeed)
+						if (root.Position - tRoot.Position).Magnitude <= 25 then
+							strikeEnemy(char, tRoot)
+						end
+					end
+				end
+			end
+		end
+	end
+end)
+
+RunService.Stepped:Connect(function()
+	if not ScriptRunning then return end
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local root = char:FindFirstChild("HumanoidRootPart")
+
+	if WalkOnWaterEnabled and root then
+		ensureWalkOnWaterPart(root.Position)
+	end
+	if hum and WalkSpeedEnabled and hum.WalkSpeed ~= TargetWalkSpeed then
+		hum.WalkSpeed = TargetWalkSpeed
+	end
+	if AutoSailEnabled and hum and hum.SeatPart and LockedSailDir then
+		local seat = hum.SeatPart
+		local vel = LockedSailDir * TargetBoatSpeed
+		seat.AssemblyLinearVelocity = Vector3.new(vel.X, seat.AssemblyLinearVelocity.Y, vel.Z)
+		if seat:IsA("VehicleSeat") then
+			seat.MaxSpeed = math.max(TargetBoatSpeed, 150)
+			seat.Throttle = 1
+			seat.Steer = 0
+		end
+	end
+
+	local noclipActive = hasActiveTargetFarm() or PvPEnabled or AutoGetFruitsEnabled or (BoatNoclipEnabled and hum and hum.SeatPart)
+	if noclipActive then
+		for _, part in ipairs(char:GetChildren()) do
+			if part:IsA("BasePart") and part.CanCollide then
+				part.CanCollide = false
+			end
+		end
+	end
+	if BoatNoclipEnabled and hum and hum.SeatPart then
+		local boatModel = hum.SeatPart:FindFirstAncestorOfClass("Model")
+		if boatModel then
+			for _, part in ipairs(boatModel:GetDescendants()) do
 				if part:IsA("BasePart") and part.CanCollide then
 					part.CanCollide = false
 				end
 			end
 		end
-		if BoatNoclipEnabled and hum and hum.SeatPart then
-			local boatModel = hum.SeatPart:FindFirstAncestorOfClass("Model")
-			if boatModel then
-				for _, part in ipairs(boatModel:GetDescendants()) do
-					if part:IsA("BasePart") and part.CanCollide then
-						part.CanCollide = false
-					end
-				end
-			end
-		end
-	end)
-end)
-
-runStep("DrawingESP", function()
-	local hasDrawing = false
-	pcall(function()
-		hasDrawing = (Drawing ~= nil and type(Drawing.new) == "function")
-	end)
-
-	if hasDrawing then
-		local function safeRemoveDrawing(d)
-			if d and type(d.Remove) == "function" then
-				pcall(function() d:Remove() end)
-			end
-		end
-
-		local function createDrawing(drawType, properties)
-			local ok, obj = pcall(function() return Drawing.new(drawType) end)
-			if not ok or not obj then
-				return nil
-			end
-			pcall(function()
-				for k, v in pairs(properties) do
-					pcall(function() obj[k] = v end)
-				end
-			end)
-			return obj
-		end
-
-		local function addPlayer(player)
-			pcall(function()
-				if player == LocalPlayer or TrackedPlayers[player] then
-					return
-				end
-				TrackedPlayers[player] = {
-					Box = createDrawing("Square", {Thickness = 1.5, Color = ThemeColor, Filled = false, Visible = false}),
-					Tracer = createDrawing("Line", {Thickness = 1.2, Color = ThemeColor, Transparency = 0.7, Visible = false}),
-					Name = createDrawing("Text", {Size = 12, Center = true, Outline = true, Color = Color3.new(1, 1, 1), Visible = false}),
-					HealthBar = createDrawing("Square", {Thickness = 1, Filled = true, Visible = false}),
-					HealthOutline = createDrawing("Square", {Thickness = 1, Filled = false, Color = Color3.new(0, 0, 0), Visible = false})
-				}
-			end)
-		end
-
-		local function removePlayer(player)
-			pcall(function()
-				local data = TrackedPlayers[player]
-				if data then
-					for _, d in pairs(data) do
-						safeRemoveDrawing(d)
-					end
-					TrackedPlayers[player] = nil
-				end
-			end)
-		end
-
-		local function addNPC(model)
-			pcall(function()
-				if TrackedNPCs[model] or not model:IsA("Model") or Players:GetPlayerFromCharacter(model) then
-					return
-				end
-				local humanoid = model:FindFirstChildOfClass("Humanoid")
-				local rootPart = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
-				if not humanoid or not rootPart then
-					return
-				end
-				local seaEvent = isSeaEvent(model.Name)
-				TrackedNPCs[model] = {
-					Root = rootPart,
-					Humanoid = humanoid,
-					IsSeaEvent = seaEvent,
-					Text = createDrawing("Text", {Size = seaEvent and 13 or 11, Center = true, Outline = true, Color = seaEvent and SeaBeastColor or EnemyColor, Visible = false})
-				}
-			end)
-		end
-
-		local function removeNPC(model)
-			pcall(function()
-				local data = TrackedNPCs[model]
-				if data then
-					safeRemoveDrawing(data and data.Text)
-					TrackedNPCs[model] = nil
-				end
-			end)
-		end
-
-		for _, p in ipairs(Players:GetPlayers()) do
-			addPlayer(p)
-		end
-		Players.PlayerAdded:Connect(addPlayer)
-		Players.PlayerRemoving:Connect(removePlayer)
-
-		local enemiesFolder = Workspace:FindFirstChild("Enemies")
-		if enemiesFolder then
-			for _, m in ipairs(enemiesFolder:GetChildren()) do
-				addNPC(m)
-			end
-			enemiesFolder.ChildAdded:Connect(function(m)
-				task.wait(0.15)
-				addNPC(m)
-			end)
-			enemiesFolder.ChildRemoved:Connect(removeNPC)
-		end
-
-		RunService.RenderStepped:Connect(function()
-			if not ScriptRunning or not Camera then
-				return
-			end
-			pcall(function()
-				local myChar = LocalPlayer.Character
-				local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-				local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
-				local viewportCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-
-				if myHum and WalkSpeedEnabled and myHum.WalkSpeed ~= TargetWalkSpeed then
-					myHum.WalkSpeed = TargetWalkSpeed
-				end
-
-				if BoatSpeedEnabled and myHum and myHum.SeatPart and myHum.SeatPart:IsA("VehicleSeat") then
-					myHum.SeatPart.MaxSpeed = TargetBoatSpeed
-				end
-
-				for player, esp in pairs(TrackedPlayers) do
-					if not ESPEnabled or not esp.Box then
-						for _, d in pairs(esp) do
-							if d then
-								pcall(function() d.Visible = false end)
-							end
-						end
-					else
-						local char = player.Character
-						local root = char and char:FindFirstChild("HumanoidRootPart")
-						local hum = char and char:FindFirstChildOfClass("Humanoid")
-						if root and hum and hum.Health > 0 then
-							local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
-							if onScreen then
-								local head = char:FindFirstChild("Head") or root
-								local headPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
-								local legPos = Camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
-								local height = math.abs(headPos.Y - legPos.Y)
-								local width = height / 2
-
-								if esp.Box then
-									pcall(function()
-										esp.Box.Size = Vector2.new(width, height)
-										esp.Box.Position = Vector2.new(pos.X - width / 2, headPos.Y)
-										esp.Box.Visible = true
-									end)
-								end
-
-								if esp.Tracer then
-									pcall(function()
-										esp.Tracer.From = viewportCenter
-										esp.Tracer.To = Vector2.new(pos.X, headPos.Y)
-										esp.Tracer.Visible = true
-									end)
-								end
-
-								if esp.Name then
-									pcall(function()
-										local dist = myRoot and math.floor((myRoot.Position - root.Position).Magnitude) or 0
-										esp.Name.Text = player.Name .. " [" .. dist .. "m]"
-										esp.Name.Position = Vector2.new(pos.X, headPos.Y - 16)
-										esp.Name.Visible = true
-									end)
-								end
-
-								local hpPct = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
-								local barH = height * hpPct
-								if esp.HealthBar then
-									pcall(function()
-										esp.HealthBar.Size = Vector2.new(2, barH)
-										esp.HealthBar.Position = Vector2.new(esp.Box.Position.X - 6, esp.Box.Position.Y + (height - barH))
-										esp.HealthBar.Color = Color3.fromRGB(255 - (hpPct * 255), hpPct * 255, 0)
-										esp.HealthBar.Visible = true
-									end)
-								end
-
-								if esp.HealthOutline then
-									pcall(function()
-										esp.HealthOutline.Size = Vector2.new(4, height + 2)
-										esp.HealthOutline.Position = Vector2.new(esp.Box.Position.X - 7, esp.Box.Position.Y - 1)
-										esp.HealthOutline.Visible = true
-									end)
-								end
-							else
-								for _, d in pairs(esp) do
-									if d then
-										pcall(function() d.Visible = false end)
-									end
-								end
-							end
-						else
-							for _, d in pairs(esp) do
-								if d then
-									pcall(function() d.Visible = false end)
-								end
-							end
-						end
-					end
-				end
-
-				for model, esp in pairs(TrackedNPCs) do
-					if not model.Parent or not esp.Root.Parent or esp.Humanoid.Health <= 0 then
-						removeNPC(model)
-					elseif not ESPEnabled or not esp.Text then
-						if esp.Text then
-							pcall(function() esp.Text.Visible = false end)
-						end
-					else
-						local pos, onScreen = Camera:WorldToViewportPoint(esp.Root.Position)
-						if onScreen then
-							pcall(function()
-								local dist = myRoot and math.floor((myRoot.Position - esp.Root.Position).Magnitude) or 0
-								local tag = esp.IsSeaEvent and "[SEA EVENT] " or "[NPC] "
-								esp.Text.Text = tag .. model.Name .. " [" .. dist .. "m]"
-								esp.Text.Position = Vector2.new(pos.X, pos.Y)
-								esp.Text.Visible = true
-							end)
-						else
-							pcall(function() esp.Text.Visible = false end)
-						end
-					end
-				end
-			end)
-		end)
 	end
 end)
 
-print("[NEXOARO] Loaded")
+if Drawing and type(Drawing.new) == "function" then
+	local function addPlayerESP(player)
+		if player == LocalPlayer or TrackedPlayers[player] then return end
+		pcall(function()
+			TrackedPlayers[player] = {
+				Box = Drawing.new("Square"),
+				Name = Drawing.new("Text")
+			}
+			TrackedPlayers[player].Box.Thickness = 1.5
+			TrackedPlayers[player].Box.Color = ThemeColor
+			TrackedPlayers[player].Box.Filled = false
+			TrackedPlayers[player].Box.Visible = false
+			TrackedPlayers[player].Name.Size = 12
+			TrackedPlayers[player].Name.Center = true
+			TrackedPlayers[player].Name.Outline = true
+			TrackedPlayers[player].Name.Color = Color3.new(1, 1, 1)
+			TrackedPlayers[player].Name.Visible = false
+		end)
+	end
+
+	for _, p in ipairs(Players:GetPlayers()) do addPlayerESP(p) end
+	Players.PlayerAdded:Connect(addPlayerESP)
+	Players.PlayerRemoving:Connect(function(p)
+		local d = TrackedPlayers[p]
+		if d then
+			for _, obj in pairs(d) do pcall(function() obj:Remove() end) end
+			TrackedPlayers[p] = nil
+		end
+	end)
+
+	RunService.RenderStepped:Connect(function()
+		if not ScriptRunning or not Camera then return end
+		local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		for player, esp in pairs(TrackedPlayers) do
+			local char = player.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if ESPEnabled and root and hum and hum.Health > 0 then
+				local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
+				if onScreen then
+					local dist = myRoot and math.floor((myRoot.Position - root.Position).Magnitude) or 0
+					esp.Box.Size = Vector2.new(36, 54)
+					esp.Box.Position = Vector2.new(pos.X - 18, pos.Y - 27)
+					esp.Box.Visible = true
+					esp.Name.Text = player.Name .. " [" .. dist .. "m]"
+					esp.Name.Position = Vector2.new(pos.X, pos.Y - 40)
+					esp.Name.Visible = true
+				else
+					esp.Box.Visible = false
+					esp.Name.Visible = false
+				end
+			else
+				esp.Box.Visible = false
+				esp.Name.Visible = false
+			end
+		end
+	end)
+end
+
+print("[NEXOARO] Blox Fruits Hub Loaded")
