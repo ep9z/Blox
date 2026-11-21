@@ -569,13 +569,15 @@ local function triggerAutoHaki()
 	end)
 end
 
-LocalPlayer.Idled:Connect(function()
-	if AntiAFKEnabled then
-		pcall(function()
-			VirtualUser:CaptureController()
-			VirtualUser:ClickButton2(Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5))
-		end)
-	end
+pcall(function()
+	LocalPlayer.Idled:Connect(function()
+		if AntiAFKEnabled then
+			pcall(function()
+				VirtualUser:CaptureController()
+				VirtualUser:ClickButton2(Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5))
+			end)
+		end
+	end)
 end)
 
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -2012,7 +2014,7 @@ local function fireCombatStrike(char, minCooldown, useExtraClicks, targetModel)
 		fireCombatRemotes(targetModel or CurrentCombatTargetModel)
 		local x = Camera.ViewportSize.X * 0.5
 		local y = Camera.ViewportSize.Y * 0.5
-		if VirtualInputManager then
+		if VirtualInputManager and typeof(VirtualInputManager.SendMouseButtonEvent) == "function" then
 			pcall(function() VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1) end)
 			pcall(function() VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1) end)
 		end
@@ -2020,7 +2022,7 @@ local function fireCombatStrike(char, minCooldown, useExtraClicks, targetModel)
 			VirtualUser:CaptureController()
 			VirtualUser:ClickButton1(Vector2.new(x, y))
 		end)
-		if useExtraClicks and mouse1click then
+		if useExtraClicks and typeof(mouse1click) == "function" then
 			pcall(function() mouse1click() end)
 		end
 	end)
@@ -2125,9 +2127,9 @@ local function interactWithQuest(root, questPart)
 		if questPart then
 			root.CFrame = questPart.CFrame * CFrame.new(0, 0, -4)
 			for _, desc in ipairs(questPart.Parent:GetDescendants()) do
-				if desc:IsA("ProximityPrompt") and fireproximityprompt then
+				if desc:IsA("ProximityPrompt") and typeof(fireproximityprompt) == "function" then
 					pcall(function() fireproximityprompt(desc) end)
-				elseif desc:IsA("ClickDetector") and fireclickdetector then
+				elseif desc:IsA("ClickDetector") and typeof(fireclickdetector) == "function" then
 					pcall(function() fireclickdetector(desc) end)
 				end
 			end
@@ -2579,7 +2581,7 @@ RunService.Stepped:Connect(function()
 	end)
 end)
 
-if Drawing then
+if Drawing and typeof(Drawing.new) == "function" then
 	local function createDrawing(drawType, properties)
 		local ok, obj = pcall(function() return Drawing.new(drawType) end)
 		if not ok or not obj then
