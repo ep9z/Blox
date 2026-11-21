@@ -27,7 +27,7 @@ local ChestColor = Color3.fromRGB(250, 204, 21)
 local FruitColor = Color3.fromRGB(192, 132, 252)
 
 local BoatSpeedEnabled = false
-local TargetBoatSpeed = 150
+local TargetBoatSpeed = 180
 local AutoSailEnabled = false
 local LockedSailDir = nil
 local BoatNoclipEnabled = false
@@ -55,11 +55,12 @@ local AutoStoreFruitEnabled = false
 local AutoRollFruitEnabled = false
 local PvPEnabled = false
 local AimBotEnabled = false
-local PvPSpeed = 320
+local PvPSpeed = 340
 local SelectedPvPPlayer = nil
-local FlySpeed = 280
-local BringRadius = 220
+local FlySpeed = 320
+local BringRadius = 350
 local CurrentTween = nil
+local ActiveTweenOwner = nil
 local ScriptRunning = true
 local LastHitTick = 0
 local LastPvPClickTick = 0
@@ -76,17 +77,17 @@ local HydraIslandFallbackPos = Vector3.new(5750, 610, -280)
 local HauntedCastleFallbackPos = Vector3.new(-9500, 145, 6080)
 
 local FightingStylesList = {
-	{name = "Dark Step", remoteArg = "BuyBlackLeg", toolKeywords = {"dark step", "black leg"}, npcKeywords = {"dark step", "sanji"}},
-	{name = "Electric", remoteArg = "BuyElectro", toolKeywords = {"electric", "electro"}, npcKeywords = {"mad scientist", "electric"}},
-	{name = "Water Kung Fu", remoteArg = "BuyFishmanKarate", toolKeywords = {"water kung", "fishman karate"}, npcKeywords = {"water kung-fu", "fishman karate"}},
-	{name = "Dragon Breath", remoteArg = "BlackbeardReward", extraArg = "DragonClaw", toolKeywords = {"dragon breath", "dragon claw"}, npcKeywords = {"sabi", "dragon breath"}},
-	{name = "Superhuman", remoteArg = "BuySuperhuman", toolKeywords = {"superhuman"}, npcKeywords = {"martial arts master", "superhuman"}},
-	{name = "Death Step", remoteArg = "BuyDeathStep", toolKeywords = {"death step"}, npcKeywords = {"phoeyu", "death step"}},
-	{name = "Sharkman Karate", remoteArg = "BuySharkmanKarate", toolKeywords = {"sharkman karate", "sharkman"}, npcKeywords = {"daigrock", "sharkman"}},
-	{name = "Electric Claw", remoteArg = "BuyElectricClaw", toolKeywords = {"electric claw"}, npcKeywords = {"previous hero", "electric claw"}},
-	{name = "Dragon Talon", remoteArg = "BuyDragonTalon", toolKeywords = {"dragon talon"}, npcKeywords = {"uzoth", "dragon talon"}},
-	{name = "Godhuman", remoteArg = "BuyGodhuman", toolKeywords = {"godhuman"}, npcKeywords = {"ancient monk", "godhuman"}},
-	{name = "Sanguine Art", remoteArg = "BuySanguineArt", toolKeywords = {"sanguine art", "sanguine"}, npcKeywords = {"shafi", "sanguine"}}
+	{name = "Dark Step", argsList = {{"BuyBlackLeg"}}, toolKeywords = {"dark step", "black leg"}},
+	{name = "Electric", argsList = {{"BuyElectro"}}, toolKeywords = {"electric", "electro"}},
+	{name = "Water Kung Fu", argsList = {{"BuyFishmanKarate"}}, toolKeywords = {"water kung", "fishman karate"}},
+	{name = "Dragon Breath", argsList = {{"BlackbeardReward", "DragonClaw", "1"}, {"BlackbeardReward", "DragonClaw", "2"}, {"BuyDragonClaw"}}, toolKeywords = {"dragon breath", "dragon claw"}},
+	{name = "Superhuman", argsList = {{"BuySuperhuman"}}, toolKeywords = {"superhuman"}},
+	{name = "Death Step", argsList = {{"BuyDeathStep"}}, toolKeywords = {"death step"}},
+	{name = "Sharkman Karate", argsList = {{"BuySharkmanKarate"}}, toolKeywords = {"sharkman karate", "sharkman"}},
+	{name = "Electric Claw", argsList = {{"BuyElectricClaw"}}, toolKeywords = {"electric claw"}},
+	{name = "Dragon Talon", argsList = {{"BuyDragonTalon"}}, toolKeywords = {"dragon talon"}},
+	{name = "Godhuman", argsList = {{"BuyGodhuman"}}, toolKeywords = {"godhuman"}},
+	{name = "Sanguine Art", argsList = {{"BuySanguineArt"}}, toolKeywords = {"sanguine art", "sanguine"}}
 }
 
 local EnemyLevelBrackets = {
@@ -177,7 +178,7 @@ local EnemyLevelBrackets = {
 	{minLvl = 2600, maxLvl = 2624, keywords = {"marine commodore"}, questText = "Marine Commodore"},
 	{minLvl = 2625, maxLvl = 2649, keywords = {"marine rear admiral"}, questText = "Marine Rear Admiral"},
 	{minLvl = 2650, maxLvl = 2674, keywords = {"fishman raider"}, questText = "Fishman Raider"},
-	{minLvl = 2675, maxLvl = 9999, keywords = {"fishman captain", "sea event", "shark", "terror", "piranha"}, questText = "Fishman Captain"}
+	{minLvl = 2675, maxLvl = 9999, keywords = {"fishman captain", "high disciple", "dragon crew", "hydra", "sea event", "shark", "terror", "piranha"}, questText = "Fishman Captain"}
 }
 
 local AllowedChestNames = {
@@ -187,49 +188,15 @@ local AllowedChestNames = {
 }
 
 local BloxFruitNames = {
-	"Rocket Fruit",
-	"Spin Fruit",
-	"Blade Fruit",
-	"Chop Fruit",
-	"Spring Fruit",
-	"Bomb Fruit",
-	"Smoke Fruit",
-	"Spike Fruit",
-	"Flame Fruit",
-	"Falcon Fruit",
-	"Ice Fruit",
-	"Sand Fruit",
-	"Dark Fruit",
-	"Diamond Fruit",
-	"Light Fruit",
-	"Rubber Fruit",
-	"Barrier Fruit",
-	"Ghost Fruit",
-	"Magma Fruit",
-	"Quake Fruit",
-	"Buddha Fruit",
-	"Love Fruit",
-	"Spider Fruit",
-	"Sound Fruit",
-	"Phoenix Fruit",
-	"Portal Fruit",
-	"Rumble Fruit",
-	"Pain Fruit",
-	"Paw Fruit",
-	"Blizzard Fruit",
-	"Gravity Fruit",
-	"Mammoth Fruit",
-	"T-Rex Fruit",
-	"Dough Fruit",
-	"Shadow Fruit",
-	"Venom Fruit",
-	"Control Fruit",
-	"Gas Fruit",
-	"Spirit Fruit",
-	"Leopard Fruit",
-	"Yeti Fruit",
-	"Dragon Fruit",
-	"Kitsune Fruit"
+	"Rocket Fruit", "Spin Fruit", "Blade Fruit", "Chop Fruit", "Spring Fruit",
+	"Bomb Fruit", "Smoke Fruit", "Spike Fruit", "Flame Fruit", "Falcon Fruit",
+	"Ice Fruit", "Sand Fruit", "Dark Fruit", "Diamond Fruit", "Light Fruit",
+	"Rubber Fruit", "Barrier Fruit", "Ghost Fruit", "Magma Fruit", "Quake Fruit",
+	"Buddha Fruit", "Love Fruit", "Spider Fruit", "Sound Fruit", "Phoenix Fruit",
+	"Portal Fruit", "Rumble Fruit", "Pain Fruit", "Paw Fruit", "Blizzard Fruit",
+	"Gravity Fruit", "Mammoth Fruit", "T-Rex Fruit", "Dough Fruit", "Shadow Fruit",
+	"Venom Fruit", "Control Fruit", "Gas Fruit", "Spirit Fruit", "Leopard Fruit",
+	"Yeti Fruit", "Dragon Fruit", "Kitsune Fruit"
 }
 
 local BloxFruitLookup = {}
@@ -248,6 +215,33 @@ local TrackedNPCs = {}
 local TrackedChests = {}
 local TrackedFruits = {}
 local SeaEventKeywords = {"seabeast", "sea beast", "terror", "shark", "leviathan", "piranha", "ship", "ghost", "mirage", "kitsune"}
+
+local function stopTween(owner)
+	if CurrentTween and (not owner or ActiveTweenOwner == owner) then
+		pcall(function() CurrentTween:Cancel() end)
+		CurrentTween = nil
+		ActiveTweenOwner = nil
+	end
+end
+
+local function startTween(root, owner, targetCF, speed, maxDur)
+	if not root or not root.Parent then
+		return
+	end
+	local dist = (root.Position - targetCF.Position).Magnitude
+	if dist <= 3.5 then
+		stopTween(owner)
+		root.CFrame = targetCF
+		return
+	end
+	local dur = math.clamp(dist / math.max(speed or FlySpeed, 60), 0.03, maxDur or 8)
+	if CurrentTween and ActiveTweenOwner == owner then
+		pcall(function() CurrentTween:Cancel() end)
+	end
+	ActiveTweenOwner = owner
+	CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = targetCF})
+	CurrentTween:Play()
+end
 
 local function getBracketForLevel(lvl)
 	local targetLvl = tonumber(lvl) or 1
@@ -286,22 +280,14 @@ local function captureOriginalFogState()
 		}
 		for _, obj in ipairs(Lighting:GetDescendants()) do
 			if obj:IsA("Atmosphere") then
-				state.Atmospheres[obj] = {
-					Density = obj.Density,
-					Haze = obj.Haze,
-					Glare = obj.Glare
-				}
+				state.Atmospheres[obj] = {Density = obj.Density, Haze = obj.Haze, Glare = obj.Glare}
 			elseif obj:IsA("ColorCorrectionEffect") or obj:IsA("BlurEffect") then
 				state.Effects[obj] = obj.Enabled
 			end
 		end
 		for _, obj in ipairs(Camera:GetDescendants()) do
 			if obj:IsA("Atmosphere") then
-				state.Atmospheres[obj] = {
-					Density = obj.Density,
-					Haze = obj.Haze,
-					Glare = obj.Glare
-				}
+				state.Atmospheres[obj] = {Density = obj.Density, Haze = obj.Haze, Glare = obj.Glare}
 			elseif obj:IsA("ColorCorrectionEffect") or obj:IsA("BlurEffect") then
 				state.Effects[obj] = obj.Enabled
 			end
@@ -340,47 +326,16 @@ local function clearSeaFog()
 		Lighting.FogStart = 100000
 		Lighting.FogEnd = 1000000
 		Lighting.FogColor = Color3.fromRGB(190, 225, 255)
-
 		for _, obj in ipairs(Lighting:GetDescendants()) do
 			if obj:IsA("Atmosphere") then
-				if SavedFogState and not SavedFogState.Atmospheres[obj] then
-					SavedFogState.Atmospheres[obj] = {
-						Density = obj.Density,
-						Haze = obj.Haze,
-						Glare = obj.Glare
-					}
-				end
 				obj.Density = 0
 				obj.Haze = 0
 				obj.Glare = 0
 			elseif obj:IsA("ColorCorrectionEffect") or obj:IsA("BlurEffect") then
 				local n = string.lower(obj.Name)
 				if string.find(n, "fog") or string.find(n, "danger") or string.find(n, "sea") or string.find(n, "dark") then
-					if SavedFogState and SavedFogState.Effects[obj] == nil then
-						SavedFogState.Effects[obj] = obj.Enabled
-					end
 					obj.Enabled = false
 				end
-			end
-		end
-
-		for _, obj in ipairs(Camera:GetDescendants()) do
-			if obj:IsA("Atmosphere") then
-				if SavedFogState and not SavedFogState.Atmospheres[obj] then
-					SavedFogState.Atmospheres[obj] = {
-						Density = obj.Density,
-						Haze = obj.Haze,
-						Glare = obj.Glare
-					}
-				end
-				obj.Density = 0
-				obj.Haze = 0
-				obj.Glare = 0
-			elseif obj:IsA("BlurEffect") or obj:IsA("ColorCorrectionEffect") then
-				if SavedFogState and SavedFogState.Effects[obj] == nil then
-					SavedFogState.Effects[obj] = obj.Enabled
-				end
-				obj.Enabled = false
 			end
 		end
 	end)
@@ -419,17 +374,11 @@ local function isSeaEvent(name)
 end
 
 local function isVampireEnemy(model)
-	if not model or not model.Name then
-		return false
-	end
-	return string.find(string.lower(tostring(model.Name)), "vampire") ~= nil
+	return model and model.Name and string.find(string.lower(tostring(model.Name)), "vampire") ~= nil
 end
 
 local function isDemonicSoulEnemy(model)
-	if not model or not model.Name then
-		return false
-	end
-	return string.find(string.lower(tostring(model.Name)), "demonic soul") ~= nil
+	return model and model.Name and string.find(string.lower(tostring(model.Name)), "demonic soul") ~= nil
 end
 
 local function isDragonScaleEnemy(model)
@@ -445,65 +394,40 @@ local function isBoneEnemy(model)
 		return false
 	end
 	local lower = string.lower(tostring(model.Name))
-	return string.find(lower, "reborn skeleton") ~= nil or string.find(lower, "living zombie") ~= nil or string.find(lower, "demonic soul") ~= nil or string.find(lower, "posessed mummy") ~= nil or string.find(lower, "possessed mummy") ~= nil
+	return string.find(lower, "reborn skeleton") ~= nil
+		or string.find(lower, "living zombie") ~= nil
+		or string.find(lower, "demonic soul") ~= nil
+		or string.find(lower, "posessed mummy") ~= nil
+		or string.find(lower, "possessed mummy") ~= nil
+end
+
+local function getSpawnPositionForKeywords(keywords, fallbackPos)
+	local ok, pos = pcall(function()
+		local spawns = Workspace:FindFirstChild("_WorldOrigin") and Workspace._WorldOrigin:FindFirstChild("EnemySpawns")
+		if spawns then
+			for _, sp in ipairs(spawns:GetChildren()) do
+				local lower = string.lower(sp.Name)
+				for _, kw in ipairs(keywords or {}) do
+					if string.find(lower, string.lower(kw), 1, true) then
+						local part = sp:IsA("BasePart") and sp or sp:FindFirstChildWhichIsA("BasePart", true)
+						if part then
+							return part.Position + Vector3.new(0, 12, 0)
+						end
+					end
+				end
+			end
+		end
+		return fallbackPos
+	end)
+	return (ok and pos) or fallbackPos
 end
 
 local function getHydraDragonScalePosition()
-	local ok, pos = pcall(function()
-		local map = Workspace:FindFirstChild("Map")
-		if map then
-			local hydra = map:FindFirstChild("HydraIsland") or map:FindFirstChild("Hydra Island") or map:FindFirstChild("Hydra")
-			if hydra then
-				local part = hydra:IsA("BasePart") and hydra or hydra.PrimaryPart or hydra:FindFirstChildWhichIsA("BasePart", true)
-				if part then
-					return part.Position + Vector3.new(0, 120, 0)
-				end
-			end
-		end
-		local spawns = Workspace:FindFirstChild("_WorldOrigin") and Workspace._WorldOrigin:FindFirstChild("EnemySpawns")
-		if spawns then
-			for _, sp in ipairs(spawns:GetChildren()) do
-				local lower = string.lower(sp.Name)
-				if string.find(lower, "dragon crew warrior") or string.find(lower, "dragon crew archer") then
-					local part = sp:IsA("BasePart") and sp or sp:FindFirstChildWhichIsA("BasePart", true)
-					if part then
-						return part.Position + Vector3.new(0, 15, 0)
-					end
-				end
-			end
-		end
-		return HydraIslandFallbackPos
-	end)
-	return (ok and pos) or HydraIslandFallbackPos
+	return getSpawnPositionForKeywords({"dragon crew warrior", "dragon crew archer"}, HydraIslandFallbackPos)
 end
 
 local function getHauntedCastleBonesPosition()
-	local ok, pos = pcall(function()
-		local map = Workspace:FindFirstChild("Map")
-		if map then
-			local castle = map:FindFirstChild("HauntedCastle") or map:FindFirstChild("Haunted Castle")
-			if castle then
-				local part = castle:IsA("BasePart") and castle or castle.PrimaryPart or castle:FindFirstChildWhichIsA("BasePart", true)
-				if part then
-					return part.Position + Vector3.new(0, 35, 0)
-				end
-			end
-		end
-		local spawns = Workspace:FindFirstChild("_WorldOrigin") and Workspace._WorldOrigin:FindFirstChild("EnemySpawns")
-		if spawns then
-			for _, sp in ipairs(spawns:GetChildren()) do
-				local lower = string.lower(sp.Name)
-				if string.find(lower, "reborn skeleton") then
-					local part = sp:IsA("BasePart") and sp or sp:FindFirstChildWhichIsA("BasePart", true)
-					if part then
-						return part.Position + Vector3.new(0, 12, 0)
-					end
-				end
-			end
-		end
-		return HauntedCastleFallbackPos
-	end)
-	return (ok and pos) or HauntedCastleFallbackPos
+	return getSpawnPositionForKeywords({"reborn skeleton", "living zombie", "demonic soul"}, HauntedCastleFallbackPos)
 end
 
 local function resolveBloxFruitName(rawName)
@@ -523,13 +447,6 @@ local function resolveBloxFruitName(rawName)
 	local dashBase = string.match(lower, "^([a-z%-]+)%-[a-z%-]+$")
 	if dashBase and BloxFruitLookup[dashBase] then
 		return BloxFruitLookup[dashBase]
-	end
-	for _, fullName in ipairs(BloxFruitNames) do
-		local fLower = string.lower(fullName)
-		local fBase = string.gsub(fLower, "%s*fruit%s*$", "")
-		if lower == fLower or lower == fBase or lower == (fBase .. "-" .. fBase) then
-			return fullName
-		end
 	end
 	return nil
 end
@@ -555,12 +472,12 @@ local function isPickupableFruitInstance(obj)
 	if obj:IsA("Tool") then
 		return true
 	end
-	if obj:IsA("Model") then
-		if obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("TouchTransmitter", true) or obj:FindFirstChildWhichIsA("ProximityPrompt", true) or obj:FindFirstChildWhichIsA("ClickDetector", true) then
-			return true
-		end
-	elseif obj:IsA("BasePart") then
-		if obj.Name == "Handle" or obj:FindFirstChildWhichIsA("TouchTransmitter", true) or obj:FindFirstChildWhichIsA("ProximityPrompt", true) or obj:FindFirstChildWhichIsA("ClickDetector", true) then
+	if obj:IsA("Model") or obj:IsA("BasePart") then
+		if obj:FindFirstChild("Handle")
+			or obj:FindFirstChildWhichIsA("TouchTransmitter", true)
+			or obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+			or obj:FindFirstChildWhichIsA("ClickDetector", true)
+			or obj.Name == "Handle" then
 			return true
 		end
 	end
@@ -587,6 +504,39 @@ local function hasActiveTargetFarm()
 	return AutoQuestFarmEnabled or FarmVampireEnabled or FarmDemonicSoulEnabled or FarmDragonScaleEnabled or FarmBonesEnabled
 end
 
+local function getCommF()
+	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+	if remotes then
+		local commf = remotes:FindFirstChild("CommF_")
+		if commf then
+			return commf
+		end
+	end
+	for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
+		if (rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent")) and string.lower(rem.Name) == "commf_" then
+			return rem
+		end
+	end
+	return nil
+end
+
+local function invokeOrFireRemote(rem, ...)
+	if not rem then
+		return false
+	end
+	local args = {...}
+	if rem:IsA("RemoteFunction") then
+		return pcall(function()
+			rem:InvokeServer(table.unpack(args))
+		end)
+	elseif rem:IsA("RemoteEvent") then
+		return pcall(function()
+			rem:FireServer(table.unpack(args))
+		end)
+	end
+	return false
+end
+
 local function triggerAutoHaki()
 	if not AutoHakiEnabled then
 		return
@@ -598,23 +548,12 @@ local function triggerAutoHaki()
 	LastHakiTick = now
 	pcall(function()
 		local char = LocalPlayer.Character
-		if not char then
+		if not char or char:FindFirstChild("HasBuso") then
 			return
 		end
-		if char:FindFirstChild("HasBuso") then
-			return
-		end
-		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
-			if rem:IsA("RemoteEvent") or rem:IsA("RemoteFunction") then
-				local n = string.lower(rem.Name)
-				if string.find(n, "buso") or string.find(n, "haki") or string.find(n, "commf") then
-					if rem:IsA("RemoteFunction") then
-						pcall(function() rem:InvokeServer("Buso") end)
-					elseif rem:IsA("RemoteEvent") then
-						pcall(function() rem:FireServer("Buso") end)
-					end
-				end
-			end
+		local commf = getCommF()
+		if commf then
+			invokeOrFireRemote(commf, "Buso")
 		end
 	end)
 end
@@ -791,36 +730,20 @@ ExitBtn.MouseButton1Click:Connect(function()
 			hum.WalkSpeed = 16
 		end
 	end)
-	pcall(function()
-		if CurrentTween then
-			CurrentTween:Cancel()
-		end
-	end)
+	stopTween()
 	for _, esp in pairs(TrackedPlayers) do
 		for _, d in pairs(esp) do
 			pcall(function() d:Remove() end)
 		end
 	end
 	for _, esp in pairs(TrackedNPCs) do
-		pcall(function()
-			if esp.Text then
-				esp.Text:Remove()
-			end
-		end)
+		pcall(function() if esp.Text then esp.Text:Remove() end end)
 	end
 	for _, esp in pairs(TrackedChests) do
-		pcall(function()
-			if esp.Text then
-				esp.Text:Remove()
-			end
-		end)
+		pcall(function() if esp.Text then esp.Text:Remove() end end)
 	end
 	for _, esp in pairs(TrackedFruits) do
-		pcall(function()
-			if esp.Text then
-				esp.Text:Remove()
-			end
-		end)
+		pcall(function() if esp.Text then esp.Text:Remove() end end)
 	end
 	pcall(function() ScreenGui:Destroy() end)
 end)
@@ -1227,53 +1150,58 @@ local function equipMatchingFightingStyle(styleEntry)
 	return equipped
 end
 
+local function equipBestCombatTool()
+	pcall(function()
+		local char = LocalPlayer.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local backpack = LocalPlayer:FindFirstChild("Backpack")
+		if not char or not hum or not backpack then
+			return
+		end
+
+		local current = char:FindFirstChildOfClass("Tool")
+		if current and current.ToolTip ~= "Blox Fruit" then
+			return
+		end
+
+		local preferred = nil
+		local fallback = nil
+		for _, tool in ipairs(backpack:GetChildren()) do
+			if tool:IsA("Tool") then
+				local tip = tostring(tool.ToolTip or "")
+				if tip == "Melee" or tip == "Sword" then
+					preferred = preferred or tool
+				elseif tip ~= "Blox Fruit" then
+					fallback = fallback or tool
+				end
+			end
+		end
+
+		local chosen = preferred or fallback
+		if chosen then
+			hum:EquipTool(chosen)
+		end
+	end)
+end
+
 local function purchaseFightingStyle(styleEntry)
 	StatusLabel.Text = "●  Shop: Buying " .. styleEntry.name .. "..."
 	StatusLabel.TextColor3 = AccentGlow
 	pcall(function()
-		local commf = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-		if commf and (commf:IsA("RemoteFunction") or commf:IsA("RemoteEvent")) then
-			if commf:IsA("RemoteFunction") then
-				if styleEntry.extraArg then
-					pcall(function() commf:InvokeServer(styleEntry.remoteArg, styleEntry.extraArg) end)
-				else
-					pcall(function() commf:InvokeServer(styleEntry.remoteArg) end)
-				end
-			else
-				if styleEntry.extraArg then
-					pcall(function() commf:FireServer(styleEntry.remoteArg, styleEntry.extraArg) end)
-				else
-					pcall(function() commf:FireServer(styleEntry.remoteArg) end)
-				end
+		local commf = getCommF()
+		if commf then
+			for _, argPack in ipairs(styleEntry.argsList or {}) do
+				invokeOrFireRemote(commf, table.unpack(argPack))
+				task.wait(0.12)
 			end
 		end
 
-		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
-			if rem ~= commf and (rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent")) then
-				local n = string.lower(rem.Name)
-				if string.find(n, "commf") or string.find(n, "combat") or string.find(n, "style") then
-					if rem:IsA("RemoteFunction") then
-						if styleEntry.extraArg then
-							pcall(function() rem:InvokeServer(styleEntry.remoteArg, styleEntry.extraArg) end)
-						else
-							pcall(function() rem:InvokeServer(styleEntry.remoteArg) end)
-						end
-					else
-						if styleEntry.extraArg then
-							pcall(function() rem:FireServer(styleEntry.remoteArg, styleEntry.extraArg) end)
-						else
-							pcall(function() rem:FireServer(styleEntry.remoteArg) end)
-						end
-					end
-				end
-			end
-		end
-
+		task.wait(0.25)
 		if equipMatchingFightingStyle(styleEntry) then
 			StatusLabel.Text = "●  Shop: Equipped " .. styleEntry.name
 			StatusLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
 		else
-			StatusLabel.Text = "●  Shop: Requested " .. styleEntry.name
+			StatusLabel.Text = "●  Shop: Sent Request (" .. styleEntry.name .. ")"
 			StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
 		end
 	end)
@@ -1363,8 +1291,7 @@ local function applyLockedSailVelocity(seat, speed, dir)
 		local primary = (boatModel and (boatModel.PrimaryPart or seat)) or seat
 		local targetVel = flatDir * speed
 
-		local parts = getBoatParts(seat)
-		for _, part in ipairs(parts) do
+		for _, part in ipairs(getBoatParts(seat)) do
 			if not part.Anchored then
 				part.AssemblyLinearVelocity = Vector3.new(targetVel.X, part.AssemblyLinearVelocity.Y, targetVel.Z)
 			end
@@ -1424,12 +1351,7 @@ createToggle(Container1, "Boat Noclip (Rocks)", 38, false, function(state) BoatN
 createToggle(Container1, "Auto Chest (All Map)", 76, false, function(state)
 	AutoChestEnabled = state
 	if not state then
-		pcall(function()
-			if CurrentTween then
-				CurrentTween:Cancel()
-				CurrentTween = nil
-			end
-		end)
+		stopTween("Chest")
 		StatusLabel.Text = "●  Status: Ready"
 		StatusLabel.TextColor3 = TextMuted
 	end
@@ -1458,37 +1380,32 @@ createToggle(Container2, "Auto Farm Mobs (Level Locked)", 0, false, function(sta
 	elseif not AutoQuestFarmEnabled then
 		LockedFarmBracket = nil
 	end
-	if not hasActiveTargetFarm() and CurrentTween then
-		pcall(function() CurrentTween:Cancel() end)
-		CurrentTween = nil
+	if not hasActiveTargetFarm() then
+		stopTween("Farm")
 	end
 end)
 createToggle(Container2, "Farm Vampire (Fangs)", 38, false, function(state)
 	FarmVampireEnabled = state
-	if not hasActiveTargetFarm() and CurrentTween then
-		pcall(function() CurrentTween:Cancel() end)
-		CurrentTween = nil
+	if not hasActiveTargetFarm() then
+		stopTween("Farm")
 	end
 end)
 createToggle(Container2, "Farm Demonic Soul", 76, false, function(state)
 	FarmDemonicSoulEnabled = state
-	if not hasActiveTargetFarm() and CurrentTween then
-		pcall(function() CurrentTween:Cancel() end)
-		CurrentTween = nil
+	if not hasActiveTargetFarm() then
+		stopTween("Farm")
 	end
 end)
 createToggle(Container2, "Auto farm dragon scale", 114, false, function(state)
 	FarmDragonScaleEnabled = state
-	if not hasActiveTargetFarm() and CurrentTween then
-		pcall(function() CurrentTween:Cancel() end)
-		CurrentTween = nil
+	if not hasActiveTargetFarm() then
+		stopTween("Farm")
 	end
 end)
 createToggle(Container2, "Auto Farm Bones", 152, false, function(state)
 	FarmBonesEnabled = state
-	if not hasActiveTargetFarm() and CurrentTween then
-		pcall(function() CurrentTween:Cancel() end)
-		CurrentTween = nil
+	if not hasActiveTargetFarm() then
+		stopTween("Farm")
 	end
 end)
 createToggle(Container2, "Bring Mobs Under You", 190, true, function(state)
@@ -1556,12 +1473,7 @@ end)
 createToggle(Container5, "Auto Kill Target", 0, false, function(state)
 	PvPEnabled = state
 	if not state then
-		pcall(function()
-			if CurrentTween then
-				CurrentTween:Cancel()
-				CurrentTween = nil
-			end
-		end)
+		stopTween("PvP")
 		if not AimBotEnabled then
 			StatusLabel.Text = "●  Status: Ready"
 			StatusLabel.TextColor3 = TextMuted
@@ -1632,12 +1544,7 @@ listStroke.Thickness = 1
 createToggle(Container6, "Auto Get Fruits", 0, false, function(state)
 	AutoGetFruitsEnabled = state
 	if not state then
-		pcall(function()
-			if CurrentTween then
-				CurrentTween:Cancel()
-				CurrentTween = nil
-			end
-		end)
+		stopTween("Fruit")
 		StatusLabel.Text = "●  Status: Ready"
 		StatusLabel.TextColor3 = TextMuted
 	end
@@ -1808,35 +1715,9 @@ local function hasActiveQuest()
 		if questFrame and questFrame.Visible then
 			return true
 		end
-		for _, gui in ipairs(playerGui:GetDescendants()) do
-			if gui:IsA("Frame") and string.find(string.lower(gui.Name), "quest") and gui.Visible then
-				local titleLbl = gui:FindFirstChildWhichIsA("TextLabel", true)
-				if titleLbl and titleLbl.Text ~= "" and not string.find(string.lower(titleLbl.Text), "select") then
-					return true
-				end
-			end
-		end
 		return false
 	end)
 	return ok and active or false
-end
-
-local function ensureEquippedIfNone()
-	pcall(function()
-		local char = LocalPlayer.Character
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		local backpack = LocalPlayer:FindFirstChild("Backpack")
-		if not char or not hum or not backpack then
-			return
-		end
-		if char:FindFirstChildOfClass("Tool") then
-			return
-		end
-		local firstTool = backpack:FindFirstChildOfClass("Tool")
-		if firstTool then
-			hum:EquipTool(firstTool)
-		end
-	end)
 end
 
 local function storeFruitsInInventory()
@@ -1846,6 +1727,7 @@ local function storeFruitsInInventory()
 	end
 	LastStoreTick = now
 	pcall(function()
+		local commf = getCommF()
 		local containers = {LocalPlayer:FindFirstChild("Backpack"), LocalPlayer.Character}
 		for _, cont in ipairs(containers) do
 			if cont then
@@ -1853,42 +1735,9 @@ local function storeFruitsInInventory()
 					local resolvedFruit = item:IsA("Tool") and resolveBloxFruitName(item.Name) or nil
 					if resolvedFruit then
 						local fruitKey = getStoreFruitKey(item, resolvedFruit)
-						local storedViaRemote = false
-
-						for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
-							if rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent") then
-								local n = string.lower(rem.Name)
-								if string.find(n, "commf") or string.find(n, "store") or string.find(n, "fruit") or string.find(n, "inventory") then
-									if rem:IsA("RemoteFunction") then
-										pcall(function() rem:InvokeServer("StoreFruit", fruitKey, item) end)
-										pcall(function() rem:InvokeServer("StoreFruit", resolvedFruit, item) end)
-										pcall(function() rem:InvokeServer("Store", fruitKey) end)
-										pcall(function() rem:InvokeServer(fruitKey, item) end)
-										storedViaRemote = true
-									elseif rem:IsA("RemoteEvent") then
-										pcall(function() rem:FireServer("StoreFruit", fruitKey, item) end)
-										pcall(function() rem:FireServer("StoreFruit", resolvedFruit, item) end)
-										pcall(function() rem:FireServer("Store", fruitKey) end)
-										pcall(function() rem:FireServer(fruitKey, item) end)
-										storedViaRemote = true
-									end
-								end
-							end
-						end
-
-						if not storedViaRemote then
-							for _, gui in ipairs(playerGui:GetDescendants()) do
-								if gui:IsA("TextButton") and gui.Visible then
-									local txt = string.lower(gui.Text)
-									if string.find(txt, "store") then
-										if getconnections then
-											for _, conn in ipairs(getconnections(gui.MouseButton1Click)) do
-												pcall(function() conn:Fire() end)
-											end
-										end
-									end
-								end
-							end
+						if commf then
+							invokeOrFireRemote(commf, "StoreFruit", fruitKey, item)
+							invokeOrFireRemote(commf, "StoreFruit", resolvedFruit, item)
 						end
 					end
 				end
@@ -1899,26 +1748,15 @@ end
 
 local function tryAutoRollFruit()
 	local now = tick()
-	if (now - LastRollTick) < 2.0 then
+	if (now - LastRollTick) < 2.2 then
 		return
 	end
 	LastRollTick = now
 	pcall(function()
-		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
-			if rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent") then
-				local n = string.lower(rem.Name)
-				if string.find(n, "roll") or string.find(n, "gacha") or string.find(n, "spin") or string.find(n, "fruit") then
-					if rem:IsA("RemoteFunction") then
-						pcall(function() rem:InvokeServer("Censor") end)
-						pcall(function() rem:InvokeServer("RollFruit") end)
-						pcall(function() rem:InvokeServer("Roll") end)
-					elseif rem:IsA("RemoteEvent") then
-						pcall(function() rem:FireServer("Censor") end)
-						pcall(function() rem:FireServer("RollFruit") end)
-						pcall(function() rem:FireServer("Roll") end)
-					end
-				end
-			end
+		local commf = getCommF()
+		if commf then
+			invokeOrFireRemote(commf, "Censor")
+			invokeOrFireRemote(commf, "RollFruit")
 		end
 	end)
 end
@@ -1962,26 +1800,13 @@ task.spawn(function()
 					StatusLabel.TextColor3 = FruitColor
 
 					local goalCF = fruitPart.CFrame + Vector3.new(0, 1.5, 0)
-					local dur = math.clamp(dist / math.max(FlySpeed, 120), 0.04, 12)
-					if CurrentTween then
-						pcall(function() CurrentTween:Cancel() end)
-					end
-					CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = goalCF})
-					CurrentTween:Play()
+					startTween(root, "Fruit", goalCF, FlySpeed, 12)
 
-					local t0 = tick()
-					while ScriptRunning and AutoGetFruitsEnabled and fruitPart.Parent and (tick() - t0) < (dur + 0.35) do
-						root.AssemblyLinearVelocity = Vector3.zero
-						task.wait(0.05)
-					end
-					if CurrentTween then
-						pcall(function() CurrentTween:Cancel() end)
-						CurrentTween = nil
-					end
-					if fruitPart.Parent then
+					if (root.Position - goalCF.Position).Magnitude <= 6 then
+						stopTween("Fruit")
 						root.CFrame = goalCF
 						for _, desc in ipairs(fruitObj:GetDescendants()) do
-							if desc:IsA("ProximityPrompt") then
+							if desc:IsA("ProximityPrompt") and fireproximityprompt then
 								pcall(function() fireproximityprompt(desc) end)
 							elseif desc:IsA("ClickDetector") and fireclickdetector then
 								pcall(function() fireclickdetector(desc) end)
@@ -2069,40 +1894,9 @@ local function applyAimBot(char, root)
 	end)
 end
 
-local function triggerAutoClickerHit(char)
+local function fireCombatStrike(char, minCooldown, useExtraClicks)
 	local now = tick()
-	local cooldown = FastAttackEnabled and 0.02 or 0.06
-	if (now - LastPvPClickTick) < cooldown then
-		return
-	end
-	LastPvPClickTick = now
-	triggerAutoHaki()
-	pcall(function()
-		local tool = char and char:FindFirstChildOfClass("Tool")
-		if tool then
-			tool:Activate()
-		end
-		local x = Camera.ViewportSize.X * 0.5
-		local y = Camera.ViewportSize.Y * 0.5
-		if VirtualInputManager then
-			VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
-			VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
-		end
-		VirtualUser:CaptureController()
-		VirtualUser:ClickButton1(Vector2.new(x, y))
-		if mouse1click then
-			mouse1click()
-		end
-	end)
-end
-
-local function triggerHit(char)
-	if isPointerOverUI() then
-		return
-	end
-	local now = tick()
-	local cooldown = FastAttackEnabled and 0.035 or 0.09
-	if (now - LastHitTick) < cooldown then
+	if (now - LastHitTick) < minCooldown then
 		return
 	end
 	LastHitTick = now
@@ -2121,12 +1915,30 @@ local function triggerHit(char)
 			VirtualUser:CaptureController()
 			VirtualUser:ClickButton1(Vector2.new(x, y))
 		end
+		if useExtraClicks then
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton1(Vector2.new(x, y))
+			if mouse1click then
+				mouse1click()
+			end
+		end
 	end)
+end
+
+local function triggerAutoClickerHit(char)
+	fireCombatStrike(char, FastAttackEnabled and 0.03 or 0.08, true)
+end
+
+local function triggerHit(char)
+	if isPointerOverUI() then
+		return
+	end
+	fireCombatStrike(char, FastAttackEnabled and 0.045 or 0.11, false)
 end
 
 task.spawn(function()
 	while ScriptRunning do
-		task.wait(0.025)
+		task.wait(0.03)
 		if PvPEnabled or AimBotEnabled then
 			pcall(function()
 				local char = LocalPlayer.Character
@@ -2157,7 +1969,7 @@ task.spawn(function()
 						return
 					end
 
-					ensureEquippedIfNone()
+					equipBestCombatTool()
 					StatusLabel.Text = "●  PvP Auto-Click: " .. tostring(targetPlr.Name) .. " [" .. tostring(math.floor(tHum.Health)) .. " HP]"
 					StatusLabel.TextColor3 = EnemyColor
 
@@ -2166,24 +1978,16 @@ task.spawn(function()
 					local dist = (root.Position - goalCF.Position).Magnitude
 
 					if dist > 4 then
-						local dur = math.clamp(dist / math.max(PvPSpeed, 80), 0.02, 2.5)
-						if CurrentTween then
-							pcall(function() CurrentTween:Cancel() end)
-						end
-						CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = goalCF})
-						CurrentTween:Play()
+						startTween(root, "PvP", goalCF, PvPSpeed, 2.5)
 					else
-						if CurrentTween then
-							pcall(function() CurrentTween:Cancel() end)
-							CurrentTween = nil
-						end
+						stopTween("PvP")
 						root.CFrame = goalCF
 						Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
 					end
 
 					root.AssemblyLinearVelocity = Vector3.zero
 					root.AssemblyAngularVelocity = Vector3.zero
-					if dist <= 22 then
+					if dist <= 25 then
 						triggerAutoClickerHit(char)
 					end
 				end
@@ -2197,30 +2001,13 @@ local function findQuestNPC(myPos)
 	pcall(function()
 		for _, obj in ipairs(Workspace:GetDescendants()) do
 			if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) and not obj:FindFirstChildOfClass("Humanoid") then
-				local n = string.lower(obj.Name)
-				if string.find(n, "quest") then
+				if string.find(string.lower(obj.Name), "quest") then
 					local part = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
 					if part then
 						local d = (myPos - part.Position).Magnitude
 						if d < bestDist then
 							bestDist = d
 							bestPart = part
-						end
-					end
-				end
-			elseif obj:IsA("ProximityPrompt") or obj:IsA("ClickDetector") then
-				local parentModel = obj:FindFirstAncestorOfClass("Model")
-				if parentModel and not Players:GetPlayerFromCharacter(parentModel) then
-					local pn = string.lower(parentModel.Name)
-					local on = string.lower(obj.Name)
-					if string.find(pn, "quest") or string.find(on, "quest") then
-						local part = parentModel:FindFirstChild("HumanoidRootPart") or parentModel.PrimaryPart or (obj.Parent and obj.Parent:IsA("BasePart") and obj.Parent)
-						if part then
-							local d = (myPos - part.Position).Magnitude
-							if d < bestDist then
-								bestDist = d
-								bestPart = part
-							end
 						end
 					end
 				end
@@ -2232,12 +2019,14 @@ end
 
 local function interactWithQuest(root, questPart)
 	pcall(function()
-		root.CFrame = questPart.CFrame * CFrame.new(0, 0, -4)
-		for _, desc in ipairs(questPart.Parent:GetDescendants()) do
-			if desc:IsA("ProximityPrompt") then
-				pcall(function() fireproximityprompt(desc) end)
-			elseif desc:IsA("ClickDetector") and fireclickdetector then
-				pcall(function() fireclickdetector(desc) end)
+		if questPart then
+			root.CFrame = questPart.CFrame * CFrame.new(0, 0, -4)
+			for _, desc in ipairs(questPart.Parent:GetDescendants()) do
+				if desc:IsA("ProximityPrompt") and fireproximityprompt then
+					pcall(function() fireproximityprompt(desc) end)
+				elseif desc:IsA("ClickDetector") and fireclickdetector then
+					pcall(function() fireclickdetector(desc) end)
+				end
 			end
 		end
 		for _, gui in ipairs(playerGui:GetDescendants()) do
@@ -2349,17 +2138,9 @@ local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefi
 		local dist = (root.Position - targetPos).Magnitude
 
 		if dist > 6.5 then
-			local duration = math.clamp(dist / math.max(FlySpeed, 60), 0.04, 2.5)
-			if CurrentTween then
-				pcall(function() CurrentTween:Cancel() end)
-			end
-			CurrentTween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = lookCF})
-			CurrentTween:Play()
+			startTween(root, "Farm", lookCF, FlySpeed, 2.5)
 		else
-			if CurrentTween then
-				pcall(function() CurrentTween:Cancel() end)
-				CurrentTween = nil
-			end
+			stopTween("Farm")
 			root.CFrame = lookCF
 			Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
 		end
@@ -2367,7 +2148,7 @@ local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefi
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
 		bringMobsUnderPlayer(root.Position, tRoot, activeBracket)
-		if dist <= 18 then
+		if dist <= 22 then
 			triggerHit(char)
 		end
 		return true
@@ -2388,22 +2169,17 @@ task.spawn(function()
 				end
 
 				local myLvl = getPlayerLevel()
-				ensureEquippedIfNone()
+				equipBestCombatTool()
 
 				if FarmBonesEnabled then
 					local boneEnemy, bRoot, bHum = getNearestByPredicate(root.Position, isBoneEnemy)
 					if not farmTargetModel(char, root, boneEnemy, bRoot, bHum, "Bones Farm", Color3.fromRGB(226, 232, 240), nil) then
 						local castlePos = getHauntedCastleBonesPosition()
 						local distToCastle = (root.Position - castlePos).Magnitude
-						StatusLabel.Text = "●  Bones Farm: Waiting Respawn [" .. tostring(math.floor(distToCastle)) .. "m]"
+						StatusLabel.Text = "●  Bones Farm: Moving/Waiting [" .. tostring(math.floor(distToCastle)) .. "m]"
 						StatusLabel.TextColor3 = Color3.fromRGB(226, 232, 240)
-						if distToCastle > 18 then
-							local dur = math.clamp(distToCastle / math.max(FlySpeed, 60), 0.05, 8)
-							if CurrentTween then
-								pcall(function() CurrentTween:Cancel() end)
-							end
-							CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = CFrame.new(castlePos)})
-							CurrentTween:Play()
+						if distToCastle > 12 then
+							startTween(root, "Farm", CFrame.new(castlePos), FlySpeed, 8)
 						end
 					end
 					return
@@ -2414,15 +2190,10 @@ task.spawn(function()
 					if not farmTargetModel(char, root, scaleEnemy, sRoot, sHum, "Dragon Scale Farm", Color3.fromRGB(249, 115, 22), nil) then
 						local hydraPos = getHydraDragonScalePosition()
 						local distToHydra = (root.Position - hydraPos).Magnitude
-						StatusLabel.Text = "●  Dragon Scale Farm: Waiting Respawn [" .. tostring(math.floor(distToHydra)) .. "m]"
+						StatusLabel.Text = "●  Dragon Scale Farm: Moving/Waiting [" .. tostring(math.floor(distToHydra)) .. "m]"
 						StatusLabel.TextColor3 = Color3.fromRGB(249, 115, 22)
-						if distToHydra > 18 then
-							local dur = math.clamp(distToHydra / math.max(FlySpeed, 60), 0.05, 8)
-							if CurrentTween then
-								pcall(function() CurrentTween:Cancel() end)
-							end
-							CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = CFrame.new(hydraPos)})
-							CurrentTween:Play()
+						if distToHydra > 12 then
+							startTween(root, "Farm", CFrame.new(hydraPos), FlySpeed, 8)
 						end
 					end
 					return
@@ -2454,7 +2225,7 @@ task.spawn(function()
 					local bracket = LockedFarmBracket
 					local reqRangeText = "Lv." .. tostring(bracket.minLvl) .. "-" .. tostring(bracket.maxLvl)
 
-					if AutoQuestEnabled and not hasActiveQuest() and (tick() - LastQuestAttemptTick) > 1.2 then
+					if AutoQuestEnabled and not hasActiveQuest() and (tick() - LastQuestAttemptTick) > 1.5 then
 						local qPart, qDist = findQuestNPC(root.Position)
 						if qPart and qDist < 220 then
 							LastQuestAttemptTick = tick()
@@ -2466,8 +2237,13 @@ task.spawn(function()
 
 					local mainEnemy, eRoot, eHum = getBracketEnemy(root.Position, bracket)
 					if not farmTargetModel(char, root, mainEnemy, eRoot, eHum, "Lv." .. tostring(myLvl) .. " | " .. bracket.questText, Color3.fromRGB(74, 222, 128), bracket) then
+						local spawnPos = getSpawnPositionForKeywords(bracket.keywords, root.Position)
+						local distSpawn = (root.Position - spawnPos).Magnitude
 						StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Waiting Respawn: " .. bracket.questText .. " [" .. reqRangeText .. "]"
 						StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+						if distSpawn > 14 then
+							startTween(root, "Farm", CFrame.new(spawnPos), FlySpeed, 8)
+						end
 						root.AssemblyLinearVelocity = Vector3.zero
 						root.AssemblyAngularVelocity = Vector3.zero
 					end
@@ -2586,7 +2362,7 @@ task.spawn(function()
 							if isSeaEvent(model.Name) then
 								local dist = (myRoot.Position - esp.Root.Position).Magnitude
 								if dist < 250 then
-									ensureEquippedIfNone()
+									equipBestCombatTool()
 									triggerHit(myChar)
 									break
 								end
@@ -2617,25 +2393,10 @@ task.spawn(function()
 					StatusLabel.TextColor3 = ChestColor
 
 					local goalCF = targetChest.CFrame + Vector3.new(0, 2.5, 0)
-					local travelTime = math.clamp(dist / math.max(FlySpeed, 120), 0.04, 12)
+					startTween(root, "Chest", goalCF, FlySpeed, 12)
 
-					if CurrentTween then
-						pcall(function() CurrentTween:Cancel() end)
-					end
-					CurrentTween = TweenService:Create(root, TweenInfo.new(travelTime, Enum.EasingStyle.Linear), {CFrame = goalCF})
-					CurrentTween:Play()
-
-					local startTime = tick()
-					while ScriptRunning and AutoChestEnabled and isValidChestPart(targetChest) and (tick() - startTime) < (travelTime + 0.4) do
-						root.AssemblyLinearVelocity = Vector3.zero
-						task.wait(0.05)
-					end
-
-					if CurrentTween then
-						pcall(function() CurrentTween:Cancel() end)
-						CurrentTween = nil
-					end
-					if isValidChestPart(targetChest) then
+					if (root.Position - goalCF.Position).Magnitude <= 5 then
+						stopTween("Chest")
 						root.CFrame = goalCF
 						root.AssemblyLinearVelocity = Vector3.zero
 						task.wait(0.18)
@@ -2811,11 +2572,7 @@ if Drawing then
 		pcall(function()
 			local data = TrackedNPCs[model]
 			if data then
-				pcall(function()
-					if data.Text then
-						data.Text:Remove()
-					end
-				end)
+				pcall(function() if data.Text then data.Text:Remove() end end)
 				TrackedNPCs[model] = nil
 			end
 		end)
@@ -2838,11 +2595,7 @@ if Drawing then
 		pcall(function()
 			local data = TrackedChests[part]
 			if data then
-				pcall(function()
-					if data.Text then
-						data.Text:Remove()
-					end
-				end)
+				pcall(function() if data.Text then data.Text:Remove() end end)
 				TrackedChests[part] = nil
 			end
 		end)
@@ -2870,11 +2623,7 @@ if Drawing then
 		pcall(function()
 			local data = TrackedFruits[obj]
 			if data then
-				pcall(function()
-					if data.Text then
-						data.Text:Remove()
-					end
-				end)
+				pcall(function() if data.Text then data.Text:Remove() end end)
 				TrackedFruits[obj] = nil
 			end
 		end)
