@@ -70,6 +70,10 @@ local LastHakiTick = 0
 local LastQuestAttemptTick = 0
 local WaterPart = nil
 
+local WeaponModes = {"Melee", "Fruit", "Sword", "Gun"}
+local WeaponModeIndex = 1
+local SelectedFarmWeapon = WeaponModes[WeaponModeIndex]
+
 local SavedFogState = nil
 local LockedFarmBracket = nil
 
@@ -833,7 +837,7 @@ Container2.Position = Container1.Position
 Container2.BackgroundTransparency = 1
 Container2.ScrollBarThickness = 3
 Container2.ScrollBarImageColor3 = ThemeColor
-Container2.CanvasSize = UDim2.new(0, 0, 0, 420)
+Container2.CanvasSize = UDim2.new(0, 0, 0, 450)
 Container2.Visible = false
 Container2.Parent = MainFrame
 
@@ -1008,7 +1012,7 @@ local function createActionButton(parent, text, buttonText, yPos, callback)
 	stroke.Thickness = 1
 
 	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, -78, 1, 0)
+	label.Size = UDim2.new(1, -88, 1, 0)
 	label.Position = UDim2.new(0, 10, 0, 0)
 	label.BackgroundTransparency = 1
 	label.Text = text
@@ -1019,8 +1023,8 @@ local function createActionButton(parent, text, buttonText, yPos, callback)
 	label.Parent = row
 
 	local actionBtn = Instance.new("TextButton")
-	actionBtn.Size = UDim2.new(0, 58, 0, 20)
-	actionBtn.Position = UDim2.new(1, -66, 0.5, -10)
+	actionBtn.Size = UDim2.new(0, 72, 0, 20)
+	actionBtn.Position = UDim2.new(1, -80, 0.5, -10)
 	actionBtn.BackgroundColor3 = ThemeColor
 	actionBtn.Text = buttonText
 	actionBtn.TextColor3 = Color3.new(1, 1, 1)
@@ -1044,7 +1048,7 @@ local function createActionButton(parent, text, buttonText, yPos, callback)
 		end)
 	end)
 
-	return row
+	return row, actionBtn
 end
 
 local function createSlider(parent, yPos, prefix, minVal, maxVal, initialVal, onChange)
@@ -1156,38 +1160,65 @@ local function equipMatchingFightingStyle(styleEntry)
 	return equipped
 end
 
-local function equipBestCombatTool()
+local function toolMatchesCategory(tool, category)
+	if not tool or not tool:IsA("Tool") then
+		return false
+	end
+	local tip = string.lower(tostring(tool.ToolTip or ""))
+	local name = string.lower(tostring(tool.Name or ""))
+	if category == "Melee" then
+		return tip == "melee" or string.find(tip, "melee", 1, true) ~= nil
+	elseif category == "Fruit" then
+		return tip == "blox fruit" or string.find(tip, "fruit", 1, true) ~= nil or string.find(name, "fruit", 1, true) ~= nil
+	elseif category == "Sword" then
+		return tip == "sword" or string.find(tip, "sword", 1, true) ~= nil
+	elseif category == "Gun" then
+		return tip == "gun" or string.find(tip, "gun", 1, true) ~= nil
+	end
+	return false
+end
+
+local function equipSelectedWeapon(preferredCategory)
 	pcall(function()
 		local char = LocalPlayer.Character
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
 		local backpack = LocalPlayer:FindFirstChild("Backpack")
-		if not char or not hum or not backpack then
+		if not char or not hum then
 			return
 		end
 
+		local wanted = preferredCategory or SelectedFarmWeapon or "Melee"
 		local current = char:FindFirstChildOfClass("Tool")
-		if current and current.ToolTip ~= "Blox Fruit" then
+		if current and toolMatchesCategory(current, wanted) then
 			return
 		end
 
-		local preferred = nil
-		local fallback = nil
-		for _, tool in ipairs(backpack:GetChildren()) do
-			if tool:IsA("Tool") then
-				local tip = tostring(tool.ToolTip or "")
-				if tip == "Melee" or tip == "Sword" then
-					preferred = preferred or tool
-				elseif tip ~= "Blox Fruit" then
-					fallback = fallback or tool
+		if backpack then
+			for _, tool in ipairs(backpack:GetChildren()) do
+				if toolMatchesCategory(tool, wanted) then
+					hum:EquipTool(tool)
+					return
 				end
 			end
 		end
 
-		local chosen = preferred or fallback
-		if chosen then
-			hum:EquipTool(chosen)
+		if not current then
+			for _, fallbackCat in ipairs({"Melee", "Sword", "Fruit", "Gun"}) do
+				if backpack then
+					for _, tool in ipairs(backpack:GetChildren()) do
+						if toolMatchesCategory(tool, fallbackCat) then
+							hum:EquipTool(tool)
+							return
+						end
+					end
+				end
+			end
 		end
 	end)
+end
+
+local function equipBestCombatTool()
+	equipSelectedWeapon(SelectedFarmWeapon)
 end
 
 local function purchaseFightingStyle(styleEntry)
@@ -1414,16 +1445,29 @@ createToggle(Container2, "Auto Farm Bones", 152, false, function(state)
 		stopTween("Farm")
 	end
 end)
-createToggle(Container2, "Bring Mobs Under You", 190, false, function(state)
+
+local _, weaponModeBtn = createActionButton(Container2, "Farm Weapon (Melee/Fruit/Sword/Gun)", SelectedFarmWeapon, 190, function(btn)
+	WeaponModeIndex = (WeaponModeIndex % #WeaponModes) + 1
+	SelectedFarmWeapon = WeaponModes[WeaponModeIndex]
+	btn.Text = SelectedFarmWeapon
+	equipSelectedWeapon(SelectedFarmWeapon)
+	StatusLabel.Text = "●  Farm Weapon: " .. SelectedFarmWeapon
+	StatusLabel.TextColor3 = AccentGlow
+end)
+if weaponModeBtn then
+	weaponModeBtn.Text = SelectedFarmWeapon
+end
+
+createToggle(Container2, "Bring Mobs Under You", 228, false, function(state)
 	BringMobsEnabled = state
 end)
-createToggle(Container2, "Auto Quest (Level Based)", 228, true, function(state)
+createToggle(Container2, "Auto Quest (Level Based)", 266, true, function(state)
 	AutoQuestEnabled = state
 end)
-createToggle(Container2, "Fast Attack", 266, true, function(state)
+createToggle(Container2, "Fast Attack", 304, true, function(state)
 	FastAttackEnabled = state
 end)
-createSlider(Container2, 304, "Farm Fly Speed", 60, 800, FlySpeed, function(val)
+createSlider(Container2, 342, "Farm Fly Speed", 60, 800, FlySpeed, function(val)
 	FlySpeed = val
 end)
 
@@ -2110,7 +2154,7 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, activeBracket)
 		if not enemiesFolder then
 			return
 		end
-		local stackPos = mainEnemyRoot and mainEnemyRoot.Position or (centerPos + Vector3.new(0, -5, 0))
+		local stackPos = mainEnemyRoot and mainEnemyRoot.Position or (centerPos + Vector3.new(0, -6.5, 0))
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 			if enemy:IsA("Model") and (not activeBracket or enemyMatchesBracket(enemy, activeBracket)) then
 				local eRoot = enemy:FindFirstChild("HumanoidRootPart")
@@ -2133,10 +2177,11 @@ end
 local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefix, statusColor, activeBracket)
 	if targetEnemy and tRoot and tHum and tHum.Health > 0 then
 		local reqTag = activeBracket and (" [Lv." .. tostring(activeBracket.minLvl) .. "-" .. tostring(activeBracket.maxLvl) .. "]") or ""
-		StatusLabel.Text = "●  " .. statusPrefix .. ": " .. tostring(targetEnemy.Name) .. reqTag
+		StatusLabel.Text = "●  " .. statusPrefix .. " [" .. SelectedFarmWeapon .. "]: " .. tostring(targetEnemy.Name) .. reqTag
 		StatusLabel.TextColor3 = statusColor
 
-		local targetPos = tRoot.Position + Vector3.new(0, 4.5, 0)
+		local hoverHeight = (SelectedFarmWeapon == "Gun") and 11.0 or 7.5
+		local targetPos = tRoot.Position + Vector3.new(0, hoverHeight, 0)
 		local lookCF = CFrame.lookAt(targetPos, tRoot.Position)
 		local dist = (root.Position - targetPos).Magnitude
 
@@ -2145,13 +2190,13 @@ local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefi
 		else
 			stopTween("Farm")
 			root.CFrame = lookCF
-			Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position + Vector3.new(0, 2, 0), tRoot.Position)
+			Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position + Vector3.new(0, 2.5, 0), tRoot.Position)
 		end
 
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
 		bringMobsUnderPlayer(root.Position, tRoot, activeBracket)
-		if dist <= 18 then
+		if dist <= 24 then
 			triggerHit(char)
 		end
 		return true
