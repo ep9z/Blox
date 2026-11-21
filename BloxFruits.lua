@@ -223,6 +223,24 @@ local TrackedFruits = {}
 local SeaEventKeywords = {"seabeast", "sea beast", "terror", "shark", "leviathan", "piranha", "ship", "ghost", "mirage", "kitsune"}
 local CurrentCombatTargetModel = nil
 
+local function safeGetGuiParent()
+	local ok, coreGui = pcall(function()
+		return game:GetService("CoreGui")
+	end)
+	if ok and coreGui then
+		local testOk = pcall(function()
+			local f = Instance.new("Folder")
+			f.Name = "NexoaroProbe"
+			f.Parent = coreGui
+			f:Destroy()
+		end)
+		if testOk then
+			return coreGui
+		end
+	end
+	return LocalPlayer:WaitForChild("PlayerGui")
+end
+
 local function stopTween(owner)
 	if CurrentTween and (not owner or ActiveTweenOwner == owner) then
 		pcall(function() CurrentTween:Cancel() end)
@@ -570,19 +588,23 @@ local function triggerAutoHaki()
 end
 
 pcall(function()
-	LocalPlayer.Idled:Connect(function()
-		if AntiAFKEnabled then
-			pcall(function()
-				VirtualUser:CaptureController()
-				VirtualUser:ClickButton2(Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5))
-			end)
-		end
-	end)
+	if VirtualUser and typeof(VirtualUser.CaptureController) == "function" then
+		LocalPlayer.Idled:Connect(function()
+			if AntiAFKEnabled then
+				pcall(function()
+					VirtualUser:CaptureController()
+					if typeof(VirtualUser.ClickButton2) == "function" then
+						VirtualUser:ClickButton2(Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5))
+					end
+				end)
+			end
+		end)
+	end
 end)
 
-local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+local guiParent = safeGetGuiParent()
 pcall(function()
-	for _, gui in ipairs(playerGui:GetChildren()) do
+	for _, gui in ipairs(guiParent:GetChildren()) do
 		if gui.Name == "NexoaroController" then
 			gui:Destroy()
 		end
@@ -594,7 +616,7 @@ ScreenGui.Name = "NexoaroController"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 999
-ScreenGui.Parent = playerGui
+ScreenGui.Parent = guiParent
 
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 local UIScale = Instance.new("UIScale")
@@ -1769,7 +1791,8 @@ LocalPlayer.CharacterAdded:Connect(bindWalkSpeedGuard)
 
 local function hasActiveQuest()
 	local ok, active = pcall(function()
-		local main = playerGui:FindFirstChild("Main")
+		local pg = LocalPlayer:FindFirstChild("PlayerGui")
+		local main = pg and pg:FindFirstChild("Main")
 		local questFrame = main and main:FindFirstChild("Quest")
 		if questFrame and questFrame.Visible then
 			return true
@@ -1865,9 +1888,9 @@ task.spawn(function()
 						stopTween("Fruit")
 						root.CFrame = goalCF
 						for _, desc in ipairs(fruitObj:GetDescendants()) do
-							if desc:IsA("ProximityPrompt") and fireproximityprompt then
+							if desc:IsA("ProximityPrompt") and typeof(fireproximityprompt) == "function" then
 								pcall(function() fireproximityprompt(desc) end)
-							elseif desc:IsA("ClickDetector") and fireclickdetector then
+							elseif desc:IsA("ClickDetector") and typeof(fireclickdetector) == "function" then
 								pcall(function() fireclickdetector(desc) end)
 							end
 						end
@@ -2018,10 +2041,14 @@ local function fireCombatStrike(char, minCooldown, useExtraClicks, targetModel)
 			pcall(function() VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1) end)
 			pcall(function() VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1) end)
 		end
-		pcall(function()
-			VirtualUser:CaptureController()
-			VirtualUser:ClickButton1(Vector2.new(x, y))
-		end)
+		if VirtualUser and typeof(VirtualUser.CaptureController) == "function" then
+			pcall(function()
+				VirtualUser:CaptureController()
+				if typeof(VirtualUser.ClickButton1) == "function" then
+					VirtualUser:ClickButton1(Vector2.new(x, y))
+				end
+			end)
+		end
 		if useExtraClicks and typeof(mouse1click) == "function" then
 			pcall(function() mouse1click() end)
 		end
