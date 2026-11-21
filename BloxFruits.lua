@@ -6,15 +6,22 @@ local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
 
-local VirtualUser = nil
-pcall(function()
-	VirtualUser = game:GetService("VirtualUser")
-end)
+local function safeCall(fn, ...)
+	if type(fn) ~= "function" then
+		return false, nil
+	end
+	return pcall(fn, ...)
+end
 
-local VirtualInputManager = nil
-pcall(function()
-	VirtualInputManager = game:GetService("VirtualInputManager")
-end)
+local function safeGetService(serviceName)
+	local ok, srv = pcall(function()
+		return game:GetService(serviceName)
+	end)
+	return ok and srv or nil
+end
+
+local VirtualUser = safeGetService("VirtualUser")
+local VirtualInputManager = safeGetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
@@ -142,7 +149,7 @@ local EnemyLevelBrackets = {
 	{minLvl = 1250, maxLvl = 1274, keywords = {"ship deckhand"}, questText = "Ship Deckhand"},
 	{minLvl = 1275, maxLvl = 1299, keywords = {"ship engineer"}, questText = "Ship Engineer"},
 	{minLvl = 1300, maxLvl = 1324, keywords = {"ship steward"}, questText = "Ship Steward"},
-	{minLvl = 1325, maxLvl = 1349, keywords = {"ship officer"}, questText = "Ship Officer"},
+	{minLvl = 1325, maxLvl = 1349, keywords = "Ship Officer"},
 	{minLvl = 1350, maxLvl = 1374, keywords = {"arctic warrior"}, questText = "Arctic Warrior"},
 	{minLvl = 1375, maxLvl = 1424, keywords = {"snow lurker"}, questText = "Snow Lurker"},
 	{minLvl = 1425, maxLvl = 1449, keywords = {"sea soldier"}, questText = "Sea Soldier"},
@@ -242,7 +249,11 @@ local function safeGetGuiParent()
 			return coreGui
 		end
 	end
-	return LocalPlayer:WaitForChild("PlayerGui")
+	local playerGui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+	if playerGui then
+		return playerGui
+	end
+	return LocalPlayer:WaitForChild("PlayerGui", 10)
 end
 
 local function stopTween(owner)
@@ -268,8 +279,13 @@ local function startTween(root, owner, targetCF, speed, maxDur)
 		pcall(function() CurrentTween:Cancel() end)
 	end
 	ActiveTweenOwner = owner
-	CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = targetCF})
-	CurrentTween:Play()
+	local ok, tw = pcall(function()
+		return TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = targetCF})
+	end)
+	if ok and tw then
+		CurrentTween = tw
+		pcall(function() tw:Play() end)
+	end
 end
 
 local function getBracketForLevel(lvl)
@@ -380,7 +396,7 @@ local function ensureWalkOnWaterPart(rootPos)
 	pcall(function()
 		if not WalkOnWaterEnabled or not rootPos then
 			if WaterPart then
-				WaterPart:Destroy()
+				pcall(function() WaterPart:Destroy() end)
 				WaterPart = nil
 			end
 			return
@@ -487,8 +503,13 @@ local function resolveBloxFruitName(rawName)
 end
 
 local function getStoreFruitKey(item, resolvedName)
-	if item and item:GetAttribute("FruitName") then
-		return tostring(item:GetAttribute("FruitName"))
+	if item and item.GetAttribute then
+		local ok, attr = pcall(function()
+			return item:GetAttribute("FruitName")
+		end)
+		if ok and attr then
+			return tostring(attr)
+		end
 	end
 	local base = string.gsub(resolvedName, "%s*Fruit%s*$", "")
 	return base .. "-" .. base
@@ -560,11 +581,11 @@ local function invokeOrFireRemote(rem, ...)
 		return false
 	end
 	local args = {...}
-	if rem:IsA("RemoteFunction") then
+	if rem:IsA("RemoteFunction") and type(rem.InvokeServer) == "function" then
 		return pcall(function()
 			rem:InvokeServer(table.unpack(args))
 		end)
-	elseif rem:IsA("RemoteEvent") then
+	elseif rem:IsA("RemoteEvent") and type(rem.FireServer) == "function" then
 		return pcall(function()
 			rem:FireServer(table.unpack(args))
 		end)
@@ -594,12 +615,12 @@ local function triggerAutoHaki()
 end
 
 pcall(function()
-	if VirtualUser then
+	if VirtualUser and LocalPlayer and LocalPlayer.Idled then
 		LocalPlayer.Idled:Connect(function()
 			if AntiAFKEnabled then
 				pcall(function()
-					VirtualUser:CaptureController()
-					VirtualUser:ClickButton2(Vector2.new(500, 500))
+					safeCall(VirtualUser.CaptureController, VirtualUser)
+					safeCall(VirtualUser.ClickButton2, VirtualUser, Vector2.new(500, 500))
 				end)
 			end
 		end)
@@ -610,7 +631,7 @@ local guiParent = safeGetGuiParent()
 pcall(function()
 	for _, gui in ipairs(guiParent:GetChildren()) do
 		if gui.Name == "NexoaroController" then
-			gui:Destroy()
+			pcall(function() gui:Destroy() end)
 		end
 	end
 end)
@@ -739,6 +760,12 @@ OpenPill.MouseButton1Click:Connect(function()
 	OpenPill.Visible = false
 end)
 
+local function safeRemoveDrawing(d)
+	if d and type(d.Remove) == "function" then
+		pcall(function() d:Remove() end)
+	end
+end
+
 ExitBtn.MouseButton1Click:Connect(function()
 	ScriptRunning = false
 	LockedSailDir = nil
@@ -760,17 +787,17 @@ ExitBtn.MouseButton1Click:Connect(function()
 	stopTween()
 	for _, esp in pairs(TrackedPlayers) do
 		for _, d in pairs(esp) do
-			pcall(function() d:Remove() end)
+			safeRemoveDrawing(d)
 		end
 	end
 	for _, esp in pairs(TrackedNPCs) do
-		pcall(function() if esp.Text then esp.Text:Remove() end end)
+		safeRemoveDrawing(esp and esp.Text)
 	end
 	for _, esp in pairs(TrackedChests) do
-		pcall(function() if esp.Text then esp.Text:Remove() end end)
+		safeRemoveDrawing(esp and esp.Text)
 	end
 	for _, esp in pairs(TrackedFruits) do
-		pcall(function() if esp.Text then esp.Text:Remove() end end)
+		safeRemoveDrawing(esp and esp.Text)
 	end
 	pcall(function() ScreenGui:Destroy() end)
 end)
@@ -1166,7 +1193,7 @@ local function equipMatchingFightingStyle(styleEntry)
 		if backpack then
 			for _, item in ipairs(backpack:GetChildren()) do
 				if matchesStyleTool(item) then
-					hum:EquipTool(item)
+					safeCall(hum.EquipTool, hum, item)
 					equipped = true
 					return
 				end
@@ -1212,7 +1239,7 @@ local function equipSelectedWeapon(preferredCategory)
 		if backpack then
 			for _, tool in ipairs(backpack:GetChildren()) do
 				if toolMatchesCategory(tool, wanted) then
-					hum:EquipTool(tool)
+					safeCall(hum.EquipTool, hum, tool)
 					return
 				end
 			end
@@ -1223,7 +1250,7 @@ local function equipSelectedWeapon(preferredCategory)
 				if backpack then
 					for _, tool in ipairs(backpack:GetChildren()) do
 						if toolMatchesCategory(tool, fallbackCat) then
-							hum:EquipTool(tool)
+							safeCall(hum.EquipTool, hum, tool)
 							return
 						end
 					end
@@ -1267,13 +1294,13 @@ local function clearBoatMover(seat)
 		end
 		local mover = seat:FindFirstChild("NexoaroBoatVel")
 		if mover then
-			mover:Destroy()
+			pcall(function() mover:Destroy() end)
 		end
 		local boatModel = seat:FindFirstAncestorOfClass("Model")
 		if boatModel then
 			for _, desc in ipairs(boatModel:GetDescendants()) do
 				if desc.Name == "NexoaroBoatVel" then
-					desc:Destroy()
+					pcall(function() desc:Destroy() end)
 				end
 			end
 		end
@@ -1353,7 +1380,7 @@ local function applyLockedSailVelocity(seat, speed, dir)
 		local bv = primary:FindFirstChild("NexoaroBoatVel")
 		if not bv or not bv:IsA("BodyVelocity") then
 			if bv then
-				bv:Destroy()
+				pcall(function() bv:Destroy() end)
 			end
 			bv = Instance.new("BodyVelocity")
 			bv.Name = "NexoaroBoatVel"
@@ -1671,7 +1698,7 @@ local function refreshPlayerList()
 	pcall(function()
 		for _, child in ipairs(PlayerListFrame:GetChildren()) do
 			if child:IsA("TextButton") then
-				child:Destroy()
+				pcall(function() child:Destroy() end)
 			end
 		end
 
@@ -1854,6 +1881,33 @@ local function getNearestDroppedFruit(myPos)
 	return bestObj, bestPart, bestDist, bestName
 end
 
+local function triggerWorldInteract(root, targetContainer)
+	pcall(function()
+		if not targetContainer then
+			return
+		end
+		for _, desc in ipairs(targetContainer:GetDescendants()) do
+			if desc:IsA("ProximityPrompt") then
+				if type(fireproximityprompt) == "function" then
+					safeCall(fireproximityprompt, desc)
+				elseif type(desc.InputHoldBegin) == "function" then
+					pcall(function()
+						desc:InputHoldBegin()
+						task.wait(0.05)
+						if type(desc.InputHoldEnd) == "function" then
+							desc:InputHoldEnd()
+						end
+					end)
+				end
+			elseif desc:IsA("ClickDetector") then
+				if type(fireclickdetector) == "function" then
+					safeCall(fireclickdetector, desc)
+				end
+			end
+		end
+	end)
+end
+
 task.spawn(function()
 	while ScriptRunning do
 		task.wait(0.15)
@@ -1877,13 +1931,7 @@ task.spawn(function()
 					if (root.Position - goalCF.Position).Magnitude <= 6 then
 						stopTween("Fruit")
 						root.CFrame = goalCF
-						for _, desc in ipairs(fruitObj:GetDescendants()) do
-							if desc:IsA("ProximityPrompt") and type(fireproximityprompt) == "function" then
-								pcall(function() fireproximityprompt(desc) end)
-							elseif desc:IsA("ClickDetector") and type(fireclickdetector) == "function" then
-								pcall(function() fireclickdetector(desc) end)
-							end
-						end
+						triggerWorldInteract(root, fruitObj)
 					end
 				else
 					StatusLabel.Text = "●  Auto Get Fruits: Scanning Blox Fruits..."
@@ -1941,10 +1989,10 @@ local function fireCombatRemotes(targetModel)
 		if net then
 			local regAttack = net:FindFirstChild("RE/RegisterAttack")
 			local regHit = net:FindFirstChild("RE/RegisterHit")
-			if regAttack and regAttack:IsA("RemoteEvent") then
+			if regAttack and regAttack:IsA("RemoteEvent") and type(regAttack.FireServer) == "function" then
 				pcall(function() regAttack:FireServer(0) end)
 			end
-			if regHit and regHit:IsA("RemoteEvent") and #hitList > 0 then
+			if regHit and regHit:IsA("RemoteEvent") and type(regHit.FireServer) == "function" and #hitList > 0 then
 				local mainPart = hitList[1][1]
 				pcall(function() regHit:FireServer(mainPart, hitList) end)
 			end
@@ -2018,9 +2066,11 @@ local function fireCombatStrike(char, minCooldown, useExtraClicks, targetModel)
 			tool = char and char:FindFirstChildOfClass("Tool")
 		end
 		if tool and hum and hum.Health > 0 then
-			pcall(function() tool:Activate() end)
+			if type(tool.Activate) == "function" then
+				pcall(function() tool:Activate() end)
+			end
 			local remote = tool:FindFirstChild("LeftClickRemote") or tool:FindFirstChildWhichIsA("RemoteEvent", true)
-			if remote then
+			if remote and type(remote.FireServer) == "function" then
 				pcall(function() remote:FireServer(1) end)
 			end
 		end
@@ -2029,17 +2079,15 @@ local function fireCombatStrike(char, minCooldown, useExtraClicks, targetModel)
 		local x = vp.X * 0.5
 		local y = vp.Y * 0.5
 		if VirtualInputManager and type(VirtualInputManager.SendMouseButtonEvent) == "function" then
-			pcall(function() VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1) end)
-			pcall(function() VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1) end)
+			safeCall(VirtualInputManager.SendMouseButtonEvent, VirtualInputManager, x, y, 0, true, game, 1)
+			safeCall(VirtualInputManager.SendMouseButtonEvent, VirtualInputManager, x, y, 0, false, game, 1)
 		end
 		if VirtualUser then
-			pcall(function()
-				VirtualUser:CaptureController()
-				VirtualUser:ClickButton1(Vector2.new(x, y))
-			end)
+			safeCall(VirtualUser.CaptureController, VirtualUser)
+			safeCall(VirtualUser.ClickButton1, VirtualUser, Vector2.new(x, y))
 		end
 		if useExtraClicks and type(mouse1click) == "function" then
-			pcall(function() mouse1click() end)
+			safeCall(mouse1click)
 		end
 	end)
 end
@@ -2142,15 +2190,9 @@ end
 
 local function interactWithQuest(root, questPart)
 	pcall(function()
-		if questPart then
+		if questPart and questPart.Parent then
 			root.CFrame = questPart.CFrame * CFrame.new(0, 0, -4)
-			for _, desc in ipairs(questPart.Parent:GetDescendants()) do
-				if desc:IsA("ProximityPrompt") and type(fireproximityprompt) == "function" then
-					pcall(function() fireproximityprompt(desc) end)
-				elseif desc:IsA("ClickDetector") and type(fireclickdetector) == "function" then
-					pcall(function() fireclickdetector(desc) end)
-				end
-			end
+			triggerWorldInteract(root, questPart.Parent)
 		end
 	end)
 end
@@ -2612,7 +2654,7 @@ if hasDrawing then
 		end
 		pcall(function()
 			for k, v in pairs(properties) do
-				obj[k] = v
+				pcall(function() obj[k] = v end)
 			end
 		end)
 		return obj
@@ -2638,7 +2680,7 @@ if hasDrawing then
 			local data = TrackedPlayers[player]
 			if data then
 				for _, d in pairs(data) do
-					pcall(function() d:Remove() end)
+					safeRemoveDrawing(d)
 				end
 				TrackedPlayers[player] = nil
 			end
@@ -2669,7 +2711,7 @@ if hasDrawing then
 		pcall(function()
 			local data = TrackedNPCs[model]
 			if data then
-				pcall(function() if data.Text then data.Text:Remove() end end)
+				safeRemoveDrawing(data and data.Text)
 				TrackedNPCs[model] = nil
 			end
 		end)
@@ -2714,7 +2756,9 @@ if hasDrawing then
 			for player, esp in pairs(TrackedPlayers) do
 				if not ESPEnabled or not esp.Box then
 					for _, d in pairs(esp) do
-						d.Visible = false
+						if d then
+							pcall(function() d.Visible = false end)
+						end
 					end
 				else
 					local char = player.Character
@@ -2729,37 +2773,61 @@ if hasDrawing then
 							local height = math.abs(headPos.Y - legPos.Y)
 							local width = height / 2
 
-							esp.Box.Size = Vector2.new(width, height)
-							esp.Box.Position = Vector2.new(pos.X - width / 2, headPos.Y)
-							esp.Box.Visible = true
+							if esp.Box then
+								pcall(function()
+									esp.Box.Size = Vector2.new(width, height)
+									esp.Box.Position = Vector2.new(pos.X - width / 2, headPos.Y)
+									esp.Box.Visible = true
+								end)
+							end
 
-							esp.Tracer.From = viewportCenter
-							esp.Tracer.To = Vector2.new(pos.X, headPos.Y)
-							esp.Tracer.Visible = true
+							if esp.Tracer then
+								pcall(function()
+									esp.Tracer.From = viewportCenter
+									esp.Tracer.To = Vector2.new(pos.X, headPos.Y)
+									esp.Tracer.Visible = true
+								end)
+							end
 
-							local dist = myRoot and math.floor((myRoot.Position - root.Position).Magnitude) or 0
-							esp.Name.Text = player.Name .. " [" .. dist .. "m]"
-							esp.Name.Position = Vector2.new(pos.X, headPos.Y - 16)
-							esp.Name.Visible = true
+							if esp.Name then
+								pcall(function()
+									local dist = myRoot and math.floor((myRoot.Position - root.Position).Magnitude) or 0
+									esp.Name.Text = player.Name .. " [" .. dist .. "m]"
+									esp.Name.Position = Vector2.new(pos.X, headPos.Y - 16)
+									esp.Name.Visible = true
+								end)
+							end
 
-							local hpPct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+							local hpPct = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
 							local barH = height * hpPct
-							esp.HealthBar.Size = Vector2.new(2, barH)
-							esp.HealthBar.Position = Vector2.new(esp.Box.Position.X - 6, esp.Box.Position.Y + (height - barH))
-							esp.HealthBar.Color = Color3.fromRGB(255 - (hpPct * 255), hpPct * 255, 0)
-							esp.HealthBar.Visible = true
+							if esp.HealthBar then
+								pcall(function()
+									esp.HealthBar.Size = Vector2.new(2, barH)
+									esp.HealthBar.Position = Vector2.new(esp.Box.Position.X - 6, esp.Box.Position.Y + (height - barH))
+									esp.HealthBar.Color = Color3.fromRGB(255 - (hpPct * 255), hpPct * 255, 0)
+									esp.HealthBar.Visible = true
+								end)
+							end
 
-							esp.HealthOutline.Size = Vector2.new(4, height + 2)
-							esp.HealthOutline.Position = Vector2.new(esp.Box.Position.X - 7, esp.Box.Position.Y - 1)
-							esp.HealthOutline.Visible = true
+							if esp.HealthOutline then
+								pcall(function()
+									esp.HealthOutline.Size = Vector2.new(4, height + 2)
+									esp.HealthOutline.Position = Vector2.new(esp.Box.Position.X - 7, esp.Box.Position.Y - 1)
+									esp.HealthOutline.Visible = true
+								end)
+							end
 						else
 							for _, d in pairs(esp) do
-								d.Visible = false
+								if d then
+									pcall(function() d.Visible = false end)
+								end
 							end
 						end
 					else
 						for _, d in pairs(esp) do
-							d.Visible = false
+							if d then
+								pcall(function() d.Visible = false end)
+							end
 						end
 					end
 				end
@@ -2770,18 +2838,20 @@ if hasDrawing then
 					removeNPC(model)
 				elseif not ESPEnabled or not esp.Text then
 					if esp.Text then
-						esp.Text.Visible = false
+						pcall(function() esp.Text.Visible = false end)
 					end
 				else
 					local pos, onScreen = Camera:WorldToViewportPoint(esp.Root.Position)
 					if onScreen then
-						local dist = myRoot and math.floor((myRoot.Position - esp.Root.Position).Magnitude) or 0
-						local tag = esp.IsSeaEvent and "[SEA EVENT] " or "[NPC] "
-						esp.Text.Text = tag .. model.Name .. " [" .. dist .. "m]"
-						esp.Text.Position = Vector2.new(pos.X, pos.Y)
-						esp.Text.Visible = true
+						pcall(function()
+							local dist = myRoot and math.floor((myRoot.Position - esp.Root.Position).Magnitude) or 0
+							local tag = esp.IsSeaEvent and "[SEA EVENT] " or "[NPC] "
+							esp.Text.Text = tag .. model.Name .. " [" .. dist .. "m]"
+							esp.Text.Position = Vector2.new(pos.X, pos.Y)
+							esp.Text.Visible = true
+						end)
 					else
-						esp.Text.Visible = false
+						pcall(function() esp.Text.Visible = false end)
 					end
 				end
 			end
