@@ -66,6 +66,7 @@ local LastPvPClickTick = 0
 local LastRollTick = 0
 local LastStoreTick = 0
 local LastHakiTick = 0
+local LastQuestAttemptTick = 0
 local WaterPart = nil
 
 local SavedFogState = nil
@@ -75,17 +76,17 @@ local HydraIslandFallbackPos = Vector3.new(5750, 610, -280)
 local HauntedCastleFallbackPos = Vector3.new(-9500, 145, 6080)
 
 local FightingStylesList = {
-	{name = "Dark Step", remoteArg = "BuyBlackLeg", npcKeywords = {"dark step", "sanji"}},
-	{name = "Electric", remoteArg = "BuyElectro", npcKeywords = {"mad scientist", "electric"}},
-	{name = "Water Kung Fu", remoteArg = "BuyFishmanKarate", npcKeywords = {"water kung-fu", "fishman karate"}},
-	{name = "Dragon Breath", remoteArg = "BlackbeardReward", extraArg = "DragonClaw", npcKeywords = {"sabi", "dragon breath"}},
-	{name = "Superhuman", remoteArg = "BuySuperhuman", npcKeywords = {"martial arts master", "superhuman"}},
-	{name = "Death Step", remoteArg = "BuyDeathStep", npcKeywords = {"phoeyu", "death step"}},
-	{name = "Sharkman Karate", remoteArg = "BuySharkmanKarate", npcKeywords = {"daigrock", "sharkman"}},
-	{name = "Electric Claw", remoteArg = "BuyElectricClaw", npcKeywords = {"previous hero", "electric claw"}},
-	{name = "Dragon Talon", remoteArg = "BuyDragonTalon", npcKeywords = {"uzoth", "dragon talon"}},
-	{name = "Godhuman", remoteArg = "BuyGodhuman", npcKeywords = {"ancient monk", "godhuman"}},
-	{name = "Sanguine Art", remoteArg = "BuySanguineArt", npcKeywords = {"shafi", "sanguine"}}
+	{name = "Dark Step", remoteArg = "BuyBlackLeg", toolKeywords = {"dark step", "black leg"}, npcKeywords = {"dark step", "sanji"}},
+	{name = "Electric", remoteArg = "BuyElectro", toolKeywords = {"electric", "electro"}, npcKeywords = {"mad scientist", "electric"}},
+	{name = "Water Kung Fu", remoteArg = "BuyFishmanKarate", toolKeywords = {"water kung", "fishman karate"}, npcKeywords = {"water kung-fu", "fishman karate"}},
+	{name = "Dragon Breath", remoteArg = "BlackbeardReward", extraArg = "DragonClaw", toolKeywords = {"dragon breath", "dragon claw"}, npcKeywords = {"sabi", "dragon breath"}},
+	{name = "Superhuman", remoteArg = "BuySuperhuman", toolKeywords = {"superhuman"}, npcKeywords = {"martial arts master", "superhuman"}},
+	{name = "Death Step", remoteArg = "BuyDeathStep", toolKeywords = {"death step"}, npcKeywords = {"phoeyu", "death step"}},
+	{name = "Sharkman Karate", remoteArg = "BuySharkmanKarate", toolKeywords = {"sharkman karate", "sharkman"}, npcKeywords = {"daigrock", "sharkman"}},
+	{name = "Electric Claw", remoteArg = "BuyElectricClaw", toolKeywords = {"electric claw"}, npcKeywords = {"previous hero", "electric claw"}},
+	{name = "Dragon Talon", remoteArg = "BuyDragonTalon", toolKeywords = {"dragon talon"}, npcKeywords = {"uzoth", "dragon talon"}},
+	{name = "Godhuman", remoteArg = "BuyGodhuman", toolKeywords = {"godhuman"}, npcKeywords = {"ancient monk", "godhuman"}},
+	{name = "Sanguine Art", remoteArg = "BuySanguineArt", toolKeywords = {"sanguine art", "sanguine"}, npcKeywords = {"shafi", "sanguine"}}
 }
 
 local EnemyLevelBrackets = {
@@ -1181,56 +1182,98 @@ local function createSlider(parent, yPos, prefix, minVal, maxVal, initialVal, on
 	return card
 end
 
+local function equipMatchingFightingStyle(styleEntry)
+	local equipped = false
+	pcall(function()
+		local char = LocalPlayer.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local backpack = LocalPlayer:FindFirstChild("Backpack")
+		if not char or not hum then
+			return
+		end
+
+		local function matchesStyleTool(tool)
+			if not tool or not tool:IsA("Tool") then
+				return false
+			end
+			local tName = string.lower(tool.Name)
+			local tType = string.lower(tostring(tool.ToolTip or ""))
+			for _, kw in ipairs(styleEntry.toolKeywords or {}) do
+				local k = string.lower(kw)
+				if string.find(tName, k, 1, true) or string.find(tType, k, 1, true) then
+					return true
+				end
+			end
+			return false
+		end
+
+		for _, item in ipairs(char:GetChildren()) do
+			if matchesStyleTool(item) then
+				equipped = true
+				return
+			end
+		end
+
+		if backpack then
+			for _, item in ipairs(backpack:GetChildren()) do
+				if matchesStyleTool(item) then
+					hum:EquipTool(item)
+					equipped = true
+					return
+				end
+			end
+		end
+	end)
+	return equipped
+end
+
 local function purchaseFightingStyle(styleEntry)
 	StatusLabel.Text = "●  Shop: Buying " .. styleEntry.name .. "..."
 	StatusLabel.TextColor3 = AccentGlow
 	pcall(function()
-		local invoked = false
+		local commf = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
+		if commf and (commf:IsA("RemoteFunction") or commf:IsA("RemoteEvent")) then
+			if commf:IsA("RemoteFunction") then
+				if styleEntry.extraArg then
+					pcall(function() commf:InvokeServer(styleEntry.remoteArg, styleEntry.extraArg) end)
+				else
+					pcall(function() commf:InvokeServer(styleEntry.remoteArg) end)
+				end
+			else
+				if styleEntry.extraArg then
+					pcall(function() commf:FireServer(styleEntry.remoteArg, styleEntry.extraArg) end)
+				else
+					pcall(function() commf:FireServer(styleEntry.remoteArg) end)
+				end
+			end
+		end
+
 		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
-			if rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent") then
+			if rem ~= commf and (rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent")) then
 				local n = string.lower(rem.Name)
-				if string.find(n, "commf") or string.find(n, "combat") or string.find(n, "style") or string.find(n, "buy") then
+				if string.find(n, "commf") or string.find(n, "combat") or string.find(n, "style") then
 					if rem:IsA("RemoteFunction") then
 						if styleEntry.extraArg then
 							pcall(function() rem:InvokeServer(styleEntry.remoteArg, styleEntry.extraArg) end)
 						else
 							pcall(function() rem:InvokeServer(styleEntry.remoteArg) end)
 						end
-						invoked = true
-					elseif rem:IsA("RemoteEvent") then
+					else
 						if styleEntry.extraArg then
 							pcall(function() rem:FireServer(styleEntry.remoteArg, styleEntry.extraArg) end)
 						else
 							pcall(function() rem:FireServer(styleEntry.remoteArg) end)
 						end
-						invoked = true
 					end
 				end
 			end
 		end
 
-		for _, obj in ipairs(Workspace:GetDescendants()) do
-			if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) then
-				local lowerObj = string.lower(obj.Name)
-				for _, kw in ipairs(styleEntry.npcKeywords) do
-					if string.find(lowerObj, kw, 1, true) then
-						for _, desc in ipairs(obj:GetDescendants()) do
-							if desc:IsA("ProximityPrompt") then
-								pcall(function() fireproximityprompt(desc) end)
-							elseif desc:IsA("ClickDetector") and fireclickdetector then
-								pcall(function() fireclickdetector(desc) end)
-							end
-						end
-					end
-				end
-			end
-		end
-
-		if invoked then
-			StatusLabel.Text = "●  Shop: Requested " .. styleEntry.name
+		if equipMatchingFightingStyle(styleEntry) then
+			StatusLabel.Text = "●  Shop: Equipped " .. styleEntry.name
 			StatusLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
 		else
-			StatusLabel.Text = "●  Shop: " .. styleEntry.name .. " Triggered"
+			StatusLabel.Text = "●  Shop: Requested " .. styleEntry.name
 			StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
 		end
 	end)
@@ -2190,20 +2233,21 @@ end
 local function interactWithQuest(root, questPart)
 	pcall(function()
 		root.CFrame = questPart.CFrame * CFrame.new(0, 0, -4)
-		task.wait(0.25)
 		for _, desc in ipairs(questPart.Parent:GetDescendants()) do
 			if desc:IsA("ProximityPrompt") then
-				fireproximityprompt(desc)
+				pcall(function() fireproximityprompt(desc) end)
 			elseif desc:IsA("ClickDetector") and fireclickdetector then
-				fireclickdetector(desc)
+				pcall(function() fireclickdetector(desc) end)
 			end
 		end
 		for _, gui in ipairs(playerGui:GetDescendants()) do
 			if gui:IsA("TextButton") and gui.Visible then
 				local txt = string.lower(gui.Text)
 				if string.find(txt, "accept") or string.find(txt, "start") or string.find(txt, "quest") then
-					for _, conn in ipairs(getconnections(gui.MouseButton1Click)) do
-						conn:Fire()
+					if getconnections then
+						for _, conn in ipairs(getconnections(gui.MouseButton1Click)) do
+							pcall(function() conn:Fire() end)
+						end
 					end
 				end
 			end
@@ -2410,22 +2454,12 @@ task.spawn(function()
 					local bracket = LockedFarmBracket
 					local reqRangeText = "Lv." .. tostring(bracket.minLvl) .. "-" .. tostring(bracket.maxLvl)
 
-					if AutoQuestEnabled and not hasActiveQuest() then
+					if AutoQuestEnabled and not hasActiveQuest() and (tick() - LastQuestAttemptTick) > 1.2 then
 						local qPart, qDist = findQuestNPC(root.Position)
-						if qPart and qDist < 250 then
+						if qPart and qDist < 220 then
+							LastQuestAttemptTick = tick()
 							StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Taking Quest (" .. bracket.questText .. ")..."
 							StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-							local targetQPos = qPart.Position + Vector3.new(0, 2, -4)
-							local d = (root.Position - targetQPos).Magnitude
-							if d > 8 then
-								local dur = math.clamp(d / math.max(FlySpeed, 60), 0.05, 3)
-								if CurrentTween then
-									pcall(function() CurrentTween:Cancel() end)
-								end
-								CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetQPos)})
-								CurrentTween:Play()
-								task.wait(dur)
-							end
 							interactWithQuest(root, qPart)
 						end
 					end
