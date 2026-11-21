@@ -95,6 +95,7 @@ local LockedFarmBracket = nil
 
 local HydraIslandFallbackPos = Vector3.new(5750, 610, -280)
 local HauntedCastleFallbackPos = Vector3.new(-9500, 145, 6080)
+local HighDiscipleFallbackPos = Vector3.new(-6730, 75, -1285)
 
 local FightingStylesList = {
 	{
@@ -353,7 +354,7 @@ local function clearFlyMover(root)
 	pcall(function()
 		if root then
 			for _, obj in ipairs(root:GetChildren()) do
-				if obj.Name == "NexoaroFlyVel" or obj.Name == "NexoaroFlyGyro" then
+				if obj.Name == "NexoaroFlyVel" or obj.Name == "NexoaroFlyGyro" or obj.Name == "NexoaroBodyPos" then
 					pcall(function() obj:Destroy() end)
 				end
 			end
@@ -375,10 +376,24 @@ local function moveToTarget(root, targetCF, speed)
 		return
 	end
 
-	local stepDist = math.min(dist, math.max(speed or FlySpeed, 120) * 0.05)
+	local bv = root:FindFirstChild("NexoaroFlyVel")
+	if not bv or not bv:IsA("BodyVelocity") then
+		if bv then
+			pcall(function() bv:Destroy() end)
+		end
+		bv = Instance.new("BodyVelocity")
+		bv.Name = "NexoaroFlyVel"
+		bv.MaxForce = Vector3.new(1e7, 1e7, 1e7)
+		bv.P = 1e5
+		bv.Parent = root
+	end
+
+	local travelSpeed = math.max(speed or FlySpeed, 150)
+	bv.Velocity = offset.Unit * travelSpeed
+
+	local stepDist = math.min(dist, travelSpeed * 0.05)
 	local nextPos = root.Position + (offset.Unit * stepDist)
 	root.CFrame = CFrame.lookAt(nextPos, targetCF.Position)
-	root.AssemblyLinearVelocity = Vector3.zero
 	root.AssemblyAngularVelocity = Vector3.zero
 end
 
@@ -563,7 +578,7 @@ local function getSpawnPositionForKeywords(keywords, fallbackPos)
 			end
 		end
 	end
-	return fallbackPos
+	return fallbackPos or HighDiscipleFallbackPos
 end
 
 local function getHydraDragonScalePosition()
@@ -2186,24 +2201,6 @@ runStep("Loops", function()
 		if commf and bracket.questName then
 			invokeOrFireRemote(commf, "StartQuest", bracket.questName, bracket.questNum or 1)
 		end
-		local npcFolder = Workspace:FindFirstChild("NPCs")
-		local searchList = npcFolder and npcFolder:GetChildren() or Workspace:GetChildren()
-		local bestPart, bestDist = nil, math.huge
-		for _, obj in ipairs(searchList) do
-			if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) and not obj:FindFirstChildOfClass("Humanoid") then
-				local part = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-				if part then
-					local d = (root.Position - part.Position).Magnitude
-					if d < bestDist then
-						bestDist = d
-						bestPart = part
-					end
-				end
-			end
-		end
-		if bestPart and bestDist < 260 then
-			triggerWorldInteract(bestPart.Parent)
-		end
 	end
 
 	local function getNearestByPredicate(myPos, predicate)
@@ -2322,7 +2319,7 @@ runStep("Loops", function()
 			local lookCF = CFrame.lookAt(targetPos, tRoot.Position)
 			moveToTarget(root, lookCF, FlySpeed)
 
-			if (root.Position - tRoot.Position).Magnitude <= 70 then
+			if (root.Position - tRoot.Position).Magnitude <= 75 then
 				bringMobsUnderPlayer(root.Position, tRoot, activeBracket)
 				triggerHit(char)
 			end
@@ -2348,22 +2345,18 @@ runStep("Loops", function()
 						if not farmTargetModel(char, root, boneEnemy, bRoot, bHum, "Bones Farm", Color3.fromRGB(226, 232, 240), nil) then
 							local castlePos = getHauntedCastleBonesPosition()
 							local distToCastle = (root.Position - castlePos).Magnitude
-							StatusLabel.Text = "●  Bones Farm: Moving/Waiting [" .. tostring(math.floor(distToCastle)) .. "m]"
+							StatusLabel.Text = "●  Bones Farm: Moving [" .. tostring(math.floor(distToCastle)) .. "m]"
 							StatusLabel.TextColor3 = Color3.fromRGB(226, 232, 240)
-							if distToCastle > 12 then
-								moveToTarget(root, CFrame.new(castlePos), FlySpeed)
-							end
+							moveToTarget(root, CFrame.new(castlePos), FlySpeed)
 						end
 					elseif FarmDragonScaleEnabled then
 						local scaleEnemy, sRoot, sHum = getNearestByPredicate(root.Position, isDragonScaleEnemy)
 						if not farmTargetModel(char, root, scaleEnemy, sRoot, sHum, "Dragon Scale Farm", Color3.fromRGB(249, 115, 22), nil) then
 							local hydraPos = getHydraDragonScalePosition()
 							local distToHydra = (root.Position - hydraPos).Magnitude
-							StatusLabel.Text = "●  Dragon Scale Farm: Moving/Waiting [" .. tostring(math.floor(distToHydra)) .. "m]"
+							StatusLabel.Text = "●  Dragon Scale Farm: Moving [" .. tostring(math.floor(distToHydra)) .. "m]"
 							StatusLabel.TextColor3 = Color3.fromRGB(249, 115, 22)
-							if distToHydra > 12 then
-								moveToTarget(root, CFrame.new(hydraPos), FlySpeed)
-							end
+							moveToTarget(root, CFrame.new(hydraPos), FlySpeed)
 						end
 					elseif FarmVampireEnabled then
 						local vampEnemy, vRoot, vHum = getNearestByPredicate(root.Position, isVampireEnemy)
@@ -2392,13 +2385,11 @@ runStep("Loops", function()
 
 						local mainEnemy, eRoot, eHum = getBracketEnemy(root.Position, bracket)
 						if not farmTargetModel(char, root, mainEnemy, eRoot, eHum, "Lv." .. tostring(myLvl) .. " | " .. bracket.questText, Color3.fromRGB(74, 222, 128), bracket) then
-							local spawnPos = getSpawnPositionForKeywords(bracket.keywords, root.Position)
+							local spawnPos = getSpawnPositionForKeywords(bracket.keywords, HighDiscipleFallbackPos)
 							local distSpawn = (root.Position - spawnPos).Magnitude
-							StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Searching Mobs [" .. reqRangeText .. "]..."
+							StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Moving to Mobs [" .. reqRangeText .. "] [" .. tostring(math.floor(distSpawn)) .. "m]"
 							StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-							if distSpawn > 14 then
-								moveToTarget(root, CFrame.new(spawnPos), FlySpeed)
-							end
+							moveToTarget(root, CFrame.new(spawnPos), FlySpeed)
 						end
 					end
 				end
