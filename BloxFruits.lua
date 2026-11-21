@@ -15,16 +15,16 @@ end)
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
-local BgDark = Color3.fromRGB(10, 9, 16)
-local CardDark = Color3.fromRGB(18, 16, 28)
+local BgDark = Color3.fromRGB(9, 8, 15)
+local CardDark = Color3.fromRGB(17, 15, 28)
 local ThemeColor = Color3.fromRGB(168, 85, 247)
 local AccentGlow = Color3.fromRGB(216, 180, 254)
-local TextMain = Color3.fromRGB(244, 244, 255)
-local TextMuted = Color3.fromRGB(156, 152, 178)
+local TextMain = Color3.fromRGB(246, 245, 255)
+local TextMuted = Color3.fromRGB(154, 150, 178)
 local EnemyColor = Color3.fromRGB(244, 63, 94)
 local SeaBeastColor = Color3.fromRGB(56, 189, 248)
 local ChestColor = Color3.fromRGB(250, 204, 21)
-local FruitColor = Color3.fromRGB(168, 85, 247)
+local FruitColor = Color3.fromRGB(192, 132, 252)
 
 local BoatSpeedEnabled = false
 local TargetBoatSpeed = 150
@@ -42,6 +42,10 @@ local FarmDragonScaleEnabled = false
 local FarmBonesEnabled = false
 local BringMobsEnabled = true
 local AutoQuestEnabled = true
+local FastAttackEnabled = true
+local AutoHakiEnabled = true
+local AntiAFKEnabled = true
+local WalkOnWaterEnabled = false
 local ESPEnabled = true
 local ChestESPEnabled = false
 local RemoveFogEnabled = false
@@ -61,11 +65,119 @@ local LastHitTick = 0
 local LastPvPClickTick = 0
 local LastRollTick = 0
 local LastStoreTick = 0
+local LastHakiTick = 0
+local WaterPart = nil
 
 local SavedFogState = nil
+local LockedFarmBracket = nil
 
 local HydraIslandFallbackPos = Vector3.new(5750, 610, -280)
 local HauntedCastleFallbackPos = Vector3.new(-9500, 145, 6080)
+
+local FightingStylesList = {
+	{name = "Black Leg", remoteArg = "BuyBlackLeg", npcKeywords = {"dark step", "sanji", "black leg"}},
+	{name = "Electro", remoteArg = "BuyElectro", npcKeywords = {"mad scientist", "electro"}},
+	{name = "Fishman Karate", remoteArg = "BuyFishmanKarate", npcKeywords = {"water kung-fu", "fishman karate"}},
+	{name = "Dragon Claw", remoteArg = "BlackbeardReward", extraArg = "DragonClaw", npcKeywords = {"sabi", "dragon claw"}},
+	{name = "Superhuman", remoteArg = "BuySuperhuman", npcKeywords = {"martial arts master", "superhuman"}},
+	{name = "Death Step", remoteArg = "BuyDeathStep", npcKeywords = {"phoeyu", "death step"}},
+	{name = "Sharkman Karate", remoteArg = "BuySharkmanKarate", npcKeywords = {"daigrock", "sharkman"}},
+	{name = "Electric Claw", remoteArg = "BuyElectricClaw", npcKeywords = {"previous hero", "electric claw"}},
+	{name = "Dragon Talon", remoteArg = "BuyDragonTalon", npcKeywords = {"uzoth", "dragon talon"}},
+	{name = "Godhuman", remoteArg = "BuyGodhuman", npcKeywords = {"ancient monk", "godhuman"}},
+	{name = "Sanguine Art", remoteArg = "BuySanguineArt", npcKeywords = {"shafi", "sanguine"}}
+}
+
+local EnemyLevelBrackets = {
+	{minLvl = 1, maxLvl = 9, keywords = {"bandit"}, questText = "Bandit"},
+	{minLvl = 10, maxLvl = 14, keywords = {"monkey"}, questText = "Monkey"},
+	{minLvl = 15, maxLvl = 29, keywords = {"gorilla"}, questText = "Gorilla"},
+	{minLvl = 30, maxLvl = 39, keywords = {"pirate"}, questText = "Pirate"},
+	{minLvl = 40, maxLvl = 59, keywords = {"brute"}, questText = "Brute"},
+	{minLvl = 60, maxLvl = 74, keywords = {"desert bandit"}, questText = "Desert Bandit"},
+	{minLvl = 75, maxLvl = 89, keywords = {"desert officer"}, questText = "Desert Officer"},
+	{minLvl = 90, maxLvl = 99, keywords = {"snow bandit"}, questText = "Snow Bandit"},
+	{minLvl = 100, maxLvl = 119, keywords = {"snowman"}, questText = "Snowman"},
+	{minLvl = 120, maxLvl = 149, keywords = {"chief petty officer"}, questText = "Chief Petty Officer"},
+	{minLvl = 150, maxLvl = 174, keywords = {"sky bandit"}, questText = "Sky Bandit"},
+	{minLvl = 175, maxLvl = 189, keywords = {"dark master"}, questText = "Dark Master"},
+	{minLvl = 190, maxLvl = 209, keywords = {"prisoner"}, questText = "Prisoner"},
+	{minLvl = 210, maxLvl = 249, keywords = {"dangerous prisoner"}, questText = "Dangerous Prisoner"},
+	{minLvl = 250, maxLvl = 274, keywords = {"toga warrior"}, questText = "Toga Warrior"},
+	{minLvl = 275, maxLvl = 299, keywords = {"gladiator"}, questText = "Gladiator"},
+	{minLvl = 300, maxLvl = 324, keywords = {"military soldier"}, questText = "Military Soldier"},
+	{minLvl = 325, maxLvl = 374, keywords = {"military spy"}, questText = "Military Spy"},
+	{minLvl = 375, maxLvl = 399, keywords = {"fishman warrior"}, questText = "Fishman Warrior"},
+	{minLvl = 400, maxLvl = 449, keywords = {"fishman commando"}, questText = "Fishman Commando"},
+	{minLvl = 450, maxLvl = 474, keywords = {"god's guard", "gods guard"}, questText = "God's Guard"},
+	{minLvl = 475, maxLvl = 524, keywords = {"shanda"}, questText = "Shanda"},
+	{minLvl = 525, maxLvl = 549, keywords = {"royal squad"}, questText = "Royal Squad"},
+	{minLvl = 550, maxLvl = 624, keywords = {"royal soldier"}, questText = "Royal Soldier"},
+	{minLvl = 625, maxLvl = 649, keywords = {"galley pirate"}, questText = "Galley Pirate"},
+	{minLvl = 650, maxLvl = 699, keywords = {"galley captain"}, questText = "Galley Captain"},
+	{minLvl = 700, maxLvl = 724, keywords = {"raider"}, questText = "Raider"},
+	{minLvl = 725, maxLvl = 774, keywords = {"mercenary"}, questText = "Mercenary"},
+	{minLvl = 775, maxLvl = 799, keywords = {"swan pirate"}, questText = "Swan Pirate"},
+	{minLvl = 800, maxLvl = 874, keywords = {"factory staff"}, questText = "Factory Staff"},
+	{minLvl = 875, maxLvl = 899, keywords = {"marine lieutenant"}, questText = "Marine Lieutenant"},
+	{minLvl = 900, maxLvl = 949, keywords = {"marine captain"}, questText = "Marine Captain"},
+	{minLvl = 950, maxLvl = 974, keywords = {"zombie"}, questText = "Zombie"},
+	{minLvl = 975, maxLvl = 999, keywords = {"vampire"}, questText = "Vampire"},
+	{minLvl = 1000, maxLvl = 1049, keywords = {"snow trooper"}, questText = "Snow Trooper"},
+	{minLvl = 1050, maxLvl = 1099, keywords = {"winter warrior"}, questText = "Winter Warrior"},
+	{minLvl = 1100, maxLvl = 1124, keywords = {"lab subordinate"}, questText = "Lab Subordinate"},
+	{minLvl = 1125, maxLvl = 1174, keywords = {"horn warrior"}, questText = "Horn Warrior"},
+	{minLvl = 1175, maxLvl = 1199, keywords = {"magma ninja"}, questText = "Magma Ninja"},
+	{minLvl = 1200, maxLvl = 1249, keywords = {"lava pirate"}, questText = "Lava Pirate"},
+	{minLvl = 1250, maxLvl = 1274, keywords = {"ship deckhand"}, questText = "Ship Deckhand"},
+	{minLvl = 1275, maxLvl = 1299, keywords = {"ship engineer"}, questText = "Ship Engineer"},
+	{minLvl = 1300, maxLvl = 1324, keywords = {"ship steward"}, questText = "Ship Steward"},
+	{minLvl = 1325, maxLvl = 1349, keywords = {"ship officer"}, questText = "Ship Officer"},
+	{minLvl = 1350, maxLvl = 1374, keywords = {"arctic warrior"}, questText = "Arctic Warrior"},
+	{minLvl = 1375, maxLvl = 1424, keywords = {"snow lurker"}, questText = "Snow Lurker"},
+	{minLvl = 1425, maxLvl = 1449, keywords = {"sea soldier"}, questText = "Sea Soldier"},
+	{minLvl = 1450, maxLvl = 1474, keywords = {"water fighter"}, questText = "Water Fighter"},
+	{minLvl = 1475, maxLvl = 1499, keywords = {"pirate millionaire"}, questText = "Pirate Millionaire"},
+	{minLvl = 1500, maxLvl = 1524, keywords = {"pistol billionaire"}, questText = "Pistol Billionaire"},
+	{minLvl = 1525, maxLvl = 1574, keywords = {"dragon crew warrior"}, questText = "Dragon Crew Warrior"},
+	{minLvl = 1575, maxLvl = 1599, keywords = {"dragon crew archer"}, questText = "Dragon Crew Archer"},
+	{minLvl = 1600, maxLvl = 1624, keywords = {"female island"}, questText = "Female Island"},
+	{minLvl = 1625, maxLvl = 1649, keywords = {"giant sky island"}, questText = "Giant Sky Island"},
+	{minLvl = 1650, maxLvl = 1699, keywords = {"head baker"}, questText = "Head Baker"},
+	{minLvl = 1700, maxLvl = 1724, keywords = {"baking staff"}, questText = "Baking Staff"},
+	{minLvl = 1725, maxLvl = 1749, keywords = {"cake guard"}, questText = "Cake Guard"},
+	{minLvl = 1750, maxLvl = 1774, keywords = {"cookie crafter"}, questText = "Cookie Crafter"},
+	{minLvl = 1775, maxLvl = 1799, keywords = {"cake queen"}, questText = "Cake Queen"},
+	{minLvl = 1800, maxLvl = 1824, keywords = {"peanut president"}, questText = "Peanut President"},
+	{minLvl = 1825, maxLvl = 1849, keywords = {"ice cream chef"}, questText = "Ice Cream Chef"},
+	{minLvl = 1850, maxLvl = 1899, keywords = {"ice cream commander"}, questText = "Ice Cream Commander"},
+	{minLvl = 1900, maxLvl = 1924, keywords = {"cookie disciple"}, questText = "Cookie Disciple"},
+	{minLvl = 1925, maxLvl = 1974, keywords = {"mint mark"}, questText = "Mint Mark"},
+	{minLvl = 1975, maxLvl = 1999, keywords = {"cocoa warrior"}, questText = "Cocoa Warrior"},
+	{minLvl = 2000, maxLvl = 2024, keywords = {"chocolate bar battler"}, questText = "Chocolate Bar Battler"},
+	{minLvl = 2025, maxLvl = 2049, keywords = {"sweet thief"}, questText = "Sweet Thief"},
+	{minLvl = 2050, maxLvl = 2074, keywords = {"candy rebel"}, questText = "Candy Rebel"},
+	{minLvl = 2075, maxLvl = 2099, keywords = {"candy pirate"}, questText = "Candy Pirate"},
+	{minLvl = 2100, maxLvl = 2124, keywords = {"snow demon"}, questText = "Snow Demon"},
+	{minLvl = 2125, maxLvl = 2149, keywords = {"isle outcast"}, questText = "Isle Outcast"},
+	{minLvl = 2150, maxLvl = 2199, keywords = {"island boy"}, questText = "Island Boy"},
+	{minLvl = 2200, maxLvl = 2224, keywords = {"sun-kissed warrior"}, questText = "Sun-kissed Warrior"},
+	{minLvl = 2225, maxLvl = 2249, keywords = {"isle champion"}, questText = "Isle Champion"},
+	{minLvl = 2250, maxLvl = 2274, keywords = {"serpent hunter"}, questText = "Serpent Hunter"},
+	{minLvl = 2275, maxLvl = 2299, keywords = {"skull slayer"}, questText = "Skull Slayer"},
+	{minLvl = 2300, maxLvl = 2349, keywords = {"reborn skeleton"}, questText = "Reborn Skeleton"},
+	{minLvl = 2350, maxLvl = 2399, keywords = {"living zombie"}, questText = "Living Zombie"},
+	{minLvl = 2400, maxLvl = 2449, keywords = {"demonic soul"}, questText = "Demonic Soul"},
+	{minLvl = 2450, maxLvl = 2474, keywords = {"posessed mummy", "possessed mummy"}, questText = "Possessed Mummy"},
+	{minLvl = 2475, maxLvl = 2524, keywords = {"peanut scout"}, questText = "Peanut Scout"},
+	{minLvl = 2525, maxLvl = 2549, keywords = {"dragon crew"}, questText = "Dragon Crew"},
+	{minLvl = 2550, maxLvl = 2574, keywords = {"hydra enforcer"}, questText = "Hydra Enforcer"},
+	{minLvl = 2575, maxLvl = 2599, keywords = {"venous knight"}, questText = "Venous Knight"},
+	{minLvl = 2600, maxLvl = 2624, keywords = {"marine commodore"}, questText = "Marine Commodore"},
+	{minLvl = 2625, maxLvl = 2649, keywords = {"marine rear admiral"}, questText = "Marine Rear Admiral"},
+	{minLvl = 2650, maxLvl = 2674, keywords = {"fishman raider"}, questText = "Fishman Raider"},
+	{minLvl = 2675, maxLvl = 9999, keywords = {"fishman captain", "sea event", "shark", "terror", "piranha"}, questText = "Fishman Captain"}
+}
 
 local AllowedChestNames = {
 	"GoldChest",
@@ -135,6 +247,29 @@ local TrackedNPCs = {}
 local TrackedChests = {}
 local TrackedFruits = {}
 local SeaEventKeywords = {"seabeast", "sea beast", "terror", "shark", "leviathan", "piranha", "ship", "ghost", "mirage", "kitsune"}
+
+local function getBracketForLevel(lvl)
+	local targetLvl = tonumber(lvl) or 1
+	for _, b in ipairs(EnemyLevelBrackets) do
+		if targetLvl >= b.minLvl and targetLvl <= b.maxLvl then
+			return b
+		end
+	end
+	return EnemyLevelBrackets[#EnemyLevelBrackets]
+end
+
+local function enemyMatchesBracket(enemyModel, bracket)
+	if not enemyModel or not bracket then
+		return false
+	end
+	local lowerName = string.lower(tostring(enemyModel.Name))
+	for _, kw in ipairs(bracket.keywords) do
+		if string.find(lowerName, string.lower(kw), 1, true) then
+			return true
+		end
+	end
+	return false
+end
 
 local function captureOriginalFogState()
 	if SavedFogState then
@@ -247,6 +382,28 @@ local function clearSeaFog()
 				obj.Enabled = false
 			end
 		end
+	end)
+end
+
+local function ensureWalkOnWaterPart(rootPos)
+	pcall(function()
+		if not WalkOnWaterEnabled or not rootPos then
+			if WaterPart then
+				WaterPart:Destroy()
+				WaterPart = nil
+			end
+			return
+		end
+		if not WaterPart or not WaterPart.Parent then
+			WaterPart = Instance.new("Part")
+			WaterPart.Name = "NexoaroSeaPlatform"
+			WaterPart.Size = Vector3.new(28, 1, 28)
+			WaterPart.Anchored = true
+			WaterPart.CanCollide = true
+			WaterPart.Transparency = 1
+			WaterPart.Parent = Workspace
+		end
+		WaterPart.Position = Vector3.new(rootPos.X, -0.5, rootPos.Z)
 	end)
 end
 
@@ -429,6 +586,47 @@ local function hasActiveTargetFarm()
 	return AutoQuestFarmEnabled or FarmVampireEnabled or FarmDemonicSoulEnabled or FarmDragonScaleEnabled or FarmBonesEnabled
 end
 
+local function triggerAutoHaki()
+	if not AutoHakiEnabled then
+		return
+	end
+	local now = tick()
+	if (now - LastHakiTick) < 6 then
+		return
+	end
+	LastHakiTick = now
+	pcall(function()
+		local char = LocalPlayer.Character
+		if not char then
+			return
+		end
+		if char:FindFirstChild("HasBuso") then
+			return
+		end
+		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
+			if rem:IsA("RemoteEvent") or rem:IsA("RemoteFunction") then
+				local n = string.lower(rem.Name)
+				if string.find(n, "buso") or string.find(n, "haki") or string.find(n, "commf") then
+					if rem:IsA("RemoteFunction") then
+						pcall(function() rem:InvokeServer("Buso") end)
+					elseif rem:IsA("RemoteEvent") then
+						pcall(function() rem:FireServer("Buso") end)
+					end
+				end
+			end
+		end
+	end)
+end
+
+LocalPlayer.Idled:Connect(function()
+	if AntiAFKEnabled then
+		pcall(function()
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton2(Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5))
+		end)
+	end
+end)
+
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 pcall(function()
 	for _, gui in ipairs(playerGui:GetChildren()) do
@@ -460,10 +658,10 @@ local function applyDeviceLayout()
 	isMobile = (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) or vp.X < 750
 
 	if isMobile then
-		MainFrame.Size = UDim2.new(0, 310, 0, 355)
+		MainFrame.Size = UDim2.new(0, 326, 0, 368)
 		UIScale.Scale = math.clamp(vp.Y / 480, 0.72, 0.96)
 	else
-		MainFrame.Size = UDim2.new(0, 410, 0, 425)
+		MainFrame.Size = UDim2.new(0, 445, 0, 442)
 		UIScale.Scale = math.clamp(vp.Y / 900, 0.88, 1.15)
 	end
 end
@@ -476,12 +674,12 @@ Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 14)
 local mainStroke = Instance.new("UIStroke", MainFrame)
 mainStroke.Color = ThemeColor
 mainStroke.Thickness = 1.6
-mainStroke.Transparency = 0.2
+mainStroke.Transparency = 0.18
 
 local mainGrad = Instance.new("UIGradient", MainFrame)
 mainGrad.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(16, 13, 28)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(9, 8, 15))
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(18, 13, 30)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 7, 14))
 })
 mainGrad.Rotation = 135
 
@@ -493,7 +691,7 @@ TopBar.Parent = MainFrame
 
 local topGrad = Instance.new("UIGradient", TopBar)
 topGrad.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(34, 18, 56)),
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(38, 18, 62)),
 	ColorSequenceKeypoint.new(1, CardDark)
 })
 topGrad.Rotation = 90
@@ -518,13 +716,13 @@ Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = TopBar
 
 local SubTitle = Instance.new("TextLabel")
-SubTitle.Size = UDim2.new(0, 95, 1, 0)
-SubTitle.Position = UDim2.new(0, isMobile and 88 or 102, 0, 0)
+SubTitle.Size = UDim2.new(0, 120, 1, 0)
+SubTitle.Position = UDim2.new(0, isMobile and 88 or 104, 0, 0)
 SubTitle.BackgroundTransparency = 1
-SubTitle.Text = "SEA & FARM HUB"
+SubTitle.Text = "PRO SEA & FARM HUB"
 SubTitle.TextColor3 = AccentGlow
 SubTitle.Font = Enum.Font.GothamBold
-SubTitle.TextSize = isMobile and 9 or 10
+SubTitle.TextSize = isMobile and 8.8 or 9.8
 SubTitle.TextXAlignment = Enum.TextXAlignment.Left
 SubTitle.Parent = TopBar
 
@@ -551,7 +749,7 @@ MinBtn.Parent = TopBar
 Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 7)
 
 local OpenPill = Instance.new("TextButton")
-OpenPill.Size = UDim2.new(0, 112, 0, 32)
+OpenPill.Size = UDim2.new(0, 116, 0, 32)
 OpenPill.Position = UDim2.new(0.02, 0, 0.1, 0)
 OpenPill.BackgroundColor3 = CardDark
 OpenPill.Text = "◆ NEXOARO"
@@ -578,6 +776,9 @@ end)
 ExitBtn.MouseButton1Click:Connect(function()
 	ScriptRunning = false
 	LockedSailDir = nil
+	LockedFarmBracket = nil
+	WalkOnWaterEnabled = false
+	ensureWalkOnWaterPart(nil)
 	if RemoveFogEnabled then
 		RemoveFogEnabled = false
 		restoreOriginalFogState()
@@ -678,7 +879,7 @@ local function createTabButton(name, total)
 	tabBtn.Text = name
 	tabBtn.TextColor3 = TextMuted
 	tabBtn.Font = Enum.Font.GothamBold
-	tabBtn.TextSize = 8.8
+	tabBtn.TextSize = 8.4
 	tabBtn.TextScaled = false
 	tabBtn.Parent = TabBar
 	Instance.new("UICorner", tabBtn).CornerRadius = UDim.new(0, 6)
@@ -692,7 +893,7 @@ Container1.Position = UDim2.new(0, 10, 0, bodyTop)
 Container1.BackgroundTransparency = 1
 Container1.ScrollBarThickness = 3
 Container1.ScrollBarImageColor3 = ThemeColor
-Container1.CanvasSize = UDim2.new(0, 0, 0, 230)
+Container1.CanvasSize = UDim2.new(0, 0, 0, 240)
 Container1.Visible = true
 Container1.Parent = MainFrame
 
@@ -702,7 +903,7 @@ Container2.Position = Container1.Position
 Container2.BackgroundTransparency = 1
 Container2.ScrollBarThickness = 3
 Container2.ScrollBarImageColor3 = ThemeColor
-Container2.CanvasSize = UDim2.new(0, 0, 0, 345)
+Container2.CanvasSize = UDim2.new(0, 0, 0, 420)
 Container2.Visible = false
 Container2.Parent = MainFrame
 
@@ -712,7 +913,7 @@ Container3.Position = Container1.Position
 Container3.BackgroundTransparency = 1
 Container3.ScrollBarThickness = 3
 Container3.ScrollBarImageColor3 = ThemeColor
-Container3.CanvasSize = UDim2.new(0, 0, 0, 150)
+Container3.CanvasSize = UDim2.new(0, 0, 0, 240)
 Container3.Visible = false
 Container3.Parent = MainFrame
 
@@ -746,22 +947,33 @@ Container6.CanvasSize = UDim2.new(0, 0, 0, 160)
 Container6.Visible = false
 Container6.Parent = MainFrame
 
-local tab1Btn = createTabButton("Sea", 6)
-local tab2Btn = createTabButton("Farm", 6)
-local tab3Btn = createTabButton("Player", 6)
-local tab4Btn = createTabButton("Visuals", 6)
-local tab5Btn = createTabButton("PvP", 6)
-local tab6Btn = createTabButton("Fruits", 6)
+local Container7 = Instance.new("ScrollingFrame")
+Container7.Size = Container1.Size
+Container7.Position = Container1.Position
+Container7.BackgroundTransparency = 1
+Container7.ScrollBarThickness = 3
+Container7.ScrollBarImageColor3 = ThemeColor
+Container7.CanvasSize = UDim2.new(0, 0, 0, (#FightingStylesList * 38) + 12)
+Container7.Visible = false
+Container7.Parent = MainFrame
+
+local tab1Btn = createTabButton("Sea", 7)
+local tab2Btn = createTabButton("Farm", 7)
+local tab3Btn = createTabButton("Player", 7)
+local tab4Btn = createTabButton("Visuals", 7)
+local tab5Btn = createTabButton("PvP", 7)
+local tab6Btn = createTabButton("Fruits", 7)
+local tab7Btn = createTabButton("Shop", 7)
 
 tab1Btn.BackgroundTransparency = 0
 tab1Btn.BackgroundColor3 = ThemeColor
 tab1Btn.TextColor3 = Color3.new(1, 1, 1)
 
 local function switchTab(activeBtn, activeContainer)
-	for _, c in ipairs({Container1, Container2, Container3, Container4, Container5, Container6}) do
+	for _, c in ipairs({Container1, Container2, Container3, Container4, Container5, Container6, Container7}) do
 		c.Visible = false
 	end
-	for _, b in ipairs({tab1Btn, tab2Btn, tab3Btn, tab4Btn, tab5Btn, tab6Btn}) do
+	for _, b in ipairs({tab1Btn, tab2Btn, tab3Btn, tab4Btn, tab5Btn, tab6Btn, tab7Btn}) do
 		b.BackgroundTransparency = 1
 		b.TextColor3 = TextMuted
 	end
@@ -777,6 +989,7 @@ tab3Btn.MouseButton1Click:Connect(function() switchTab(tab3Btn, Container3) end)
 tab4Btn.MouseButton1Click:Connect(function() switchTab(tab4Btn, Container4) end)
 tab5Btn.MouseButton1Click:Connect(function() switchTab(tab5Btn, Container5) end)
 tab6Btn.MouseButton1Click:Connect(function() switchTab(tab6Btn, Container6) end)
+tab7Btn.MouseButton1Click:Connect(function() switchTab(tab7Btn, Container7) end)
 
 local function makeDraggable(handle, target)
 	local dragging, dragStart, startPos = false, nil, nil
@@ -852,6 +1065,58 @@ local function createToggle(parent, text, yPos, defaultState, callback)
 	return row
 end
 
+local function createActionButton(parent, text, buttonText, yPos, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, -6, 0, 32)
+	row.Position = UDim2.new(0, 2, 0, yPos)
+	row.BackgroundColor3 = CardDark
+	row.BorderSizePixel = 0
+	row.Parent = parent
+	Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+	local stroke = Instance.new("UIStroke", row)
+	stroke.Color = Color3.fromRGB(46, 39, 72)
+	stroke.Thickness = 1
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -78, 1, 0)
+	label.Position = UDim2.new(0, 10, 0, 0)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = TextMain
+	label.Font = Enum.Font.GothamSemibold
+	label.TextSize = 10.5
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = row
+
+	local actionBtn = Instance.new("TextButton")
+	actionBtn.Size = UDim2.new(0, 58, 0, 20)
+	actionBtn.Position = UDim2.new(1, -66, 0.5, -10)
+	actionBtn.BackgroundColor3 = ThemeColor
+	actionBtn.Text = buttonText
+	actionBtn.TextColor3 = Color3.new(1, 1, 1)
+	actionBtn.Font = Enum.Font.GothamBold
+	actionBtn.TextSize = 9.5
+	actionBtn.Active = true
+	actionBtn.Parent = row
+	Instance.new("UICorner", actionBtn).CornerRadius = UDim.new(0, 6)
+
+	actionBtn.MouseButton1Click:Connect(function()
+		stroke.Color = AccentGlow
+		actionBtn.BackgroundColor3 = Color3.fromRGB(139, 92, 246)
+		pcall(function() callback(actionBtn) end)
+		task.delay(0.25, function()
+			if stroke and stroke.Parent then
+				stroke.Color = Color3.fromRGB(46, 39, 72)
+			end
+			if actionBtn and actionBtn.Parent then
+				actionBtn.BackgroundColor3 = ThemeColor
+			end
+		end)
+	end)
+
+	return row
+end
+
 local function createSlider(parent, yPos, prefix, minVal, maxVal, initialVal, onChange)
 	local card = Instance.new("Frame")
 	card.Size = UDim2.new(1, -6, 0, 42)
@@ -914,6 +1179,61 @@ local function createSlider(parent, yPos, prefix, minVal, maxVal, initialVal, on
 		end
 	end)
 	return card
+end
+
+local function purchaseFightingStyle(styleEntry)
+	StatusLabel.Text = "●  Shop: Buying " .. styleEntry.name .. "..."
+	StatusLabel.TextColor3 = AccentGlow
+	pcall(function()
+		local invoked = false
+		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
+			if rem:IsA("RemoteFunction") or rem:IsA("RemoteEvent") then
+				local n = string.lower(rem.Name)
+				if string.find(n, "commf") or string.find(n, "combat") or string.find(n, "style") or string.find(n, "buy") then
+					if rem:IsA("RemoteFunction") then
+						if styleEntry.extraArg then
+							pcall(function() rem:InvokeServer(styleEntry.remoteArg, styleEntry.extraArg) end)
+						else
+							pcall(function() rem:InvokeServer(styleEntry.remoteArg) end)
+						end
+						invoked = true
+					elseif rem:IsA("RemoteEvent") then
+						if styleEntry.extraArg then
+							pcall(function() rem:FireServer(styleEntry.remoteArg, styleEntry.extraArg) end)
+						else
+							pcall(function() rem:FireServer(styleEntry.remoteArg) end)
+						end
+						invoked = true
+					end
+				end
+			end
+		end
+
+		for _, obj in ipairs(Workspace:GetDescendants()) do
+			if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) then
+				local lowerObj = string.lower(obj.Name)
+				for _, kw in ipairs(styleEntry.npcKeywords) do
+					if string.find(lowerObj, kw, 1, true) then
+						for _, desc in ipairs(obj:GetDescendants()) do
+							if desc:IsA("ProximityPrompt") then
+								pcall(function() fireproximityprompt(desc) end)
+							elseif desc:IsA("ClickDetector") and fireclickdetector then
+								pcall(function() fireclickdetector(desc) end)
+							end
+						end
+					end
+				end
+			end
+		end
+
+		if invoked then
+			StatusLabel.Text = "●  Shop: Requested " .. styleEntry.name
+			StatusLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
+		else
+			StatusLabel.Text = "●  Shop: " .. styleEntry.name .. " Triggered"
+			StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+		end
+	end)
 end
 
 local function clearBoatMover(seat)
@@ -1088,8 +1408,13 @@ createSlider(Container1, 152, "Boat Speed", 16, 1000, TargetBoatSpeed, function(
 	TargetBoatSpeed = val
 end)
 
-createToggle(Container2, "Auto Farm Mobs", 0, false, function(state)
+createToggle(Container2, "Auto Farm Mobs (Level Locked)", 0, false, function(state)
 	AutoQuestFarmEnabled = state
+	if state then
+		LockedFarmBracket = getBracketForLevel(getPlayerLevel())
+	elseif not AutoQuestFarmEnabled then
+		LockedFarmBracket = nil
+	end
 	if not hasActiveTargetFarm() and CurrentTween then
 		pcall(function() CurrentTween:Cancel() end)
 		CurrentTween = nil
@@ -1129,7 +1454,10 @@ end)
 createToggle(Container2, "Auto Quest (Level Based)", 228, true, function(state)
 	AutoQuestEnabled = state
 end)
-createSlider(Container2, 266, "Farm Fly Speed", 60, 800, FlySpeed, function(val)
+createToggle(Container2, "Fast Attack", 266, true, function(state)
+	FastAttackEnabled = state
+end)
+createSlider(Container2, 304, "Farm Fly Speed", 60, 800, FlySpeed, function(val)
 	FlySpeed = val
 end)
 
@@ -1155,7 +1483,19 @@ createSlider(Container3, 38, "Walk Speed", 16, 350, TargetWalkSpeed, function(va
 		end)
 	end
 end)
-createToggle(Container3, "Auto Attack Sea Beast / Shark", 88, false, function(state)
+createToggle(Container3, "Walk On Water", 88, false, function(state)
+	WalkOnWaterEnabled = state
+	if not state then
+		ensureWalkOnWaterPart(nil)
+	end
+end)
+createToggle(Container3, "Auto Haki (Buso)", 126, true, function(state)
+	AutoHakiEnabled = state
+end)
+createToggle(Container3, "Anti AFK", 164, true, function(state)
+	AntiAFKEnabled = state
+end)
+createToggle(Container3, "Auto Attack Sea Beast / Shark", 202, false, function(state)
 	AutoAttackSeaEnabled = state
 end)
 
@@ -1271,6 +1611,12 @@ end)
 createToggle(Container6, "Auto Roll Fruit", 114, false, function(state)
 	AutoRollFruitEnabled = state
 end)
+
+for i, styleEntry in ipairs(FightingStylesList) do
+	createActionButton(Container7, styleEntry.name, "Buy", (i - 1) * 38, function()
+		purchaseFightingStyle(styleEntry)
+	end)
+end
 
 local function selectPvPPlayer(plr)
 	SelectedPvPPlayer = plr
@@ -1410,43 +1756,6 @@ local function getPlayerLevel()
 		return 1
 	end)
 	return ok and lvl or 1
-end
-
-local function getEnemyLevel(enemyModel)
-	local ok, lvl = pcall(function()
-		if not enemyModel then
-			return nil
-		end
-		for _, attrName in ipairs({"Level", "Lvl", "level", "lvl"}) do
-			local attr = enemyModel:GetAttribute(attrName)
-			if typeof(attr) == "number" then
-				return attr
-			end
-		end
-		for _, childName in ipairs({"Level", "Lvl", "level", "lvl"}) do
-			local valObj = enemyModel:FindFirstChild(childName)
-			if valObj and (valObj:IsA("IntValue") or valObj:IsA("NumberValue")) then
-				return valObj.Value
-			end
-		end
-		local matched = string.match(tostring(enemyModel.Name), "%[%s*[Ll][Vv]?%.?%s*(%d+)%s*%]") or string.match(tostring(enemyModel.Name), "[Ll][Vv]?%.?%s*(%d+)")
-		if matched then
-			return tonumber(matched)
-		end
-		for _, desc in ipairs(enemyModel:GetDescendants()) do
-			if desc:IsA("TextLabel") then
-				local txtMatch = string.match(tostring(desc.Text), "[Ll][Vv]?%.?%s*(%d+)")
-				if txtMatch then
-					return tonumber(txtMatch)
-				end
-			end
-		end
-		return nil
-	end)
-	if ok then
-		return lvl
-	end
-	return nil
 end
 
 local function hasActiveQuest()
@@ -1719,10 +2028,12 @@ end
 
 local function triggerAutoClickerHit(char)
 	local now = tick()
-	if (now - LastPvPClickTick) < 0.025 then
+	local cooldown = FastAttackEnabled and 0.02 or 0.06
+	if (now - LastPvPClickTick) < cooldown then
 		return
 	end
 	LastPvPClickTick = now
+	triggerAutoHaki()
 	pcall(function()
 		local tool = char and char:FindFirstChildOfClass("Tool")
 		if tool then
@@ -1747,10 +2058,12 @@ local function triggerHit(char)
 		return
 	end
 	local now = tick()
-	if (now - LastHitTick) < 0.08 then
+	local cooldown = FastAttackEnabled and 0.035 or 0.09
+	if (now - LastHitTick) < cooldown then
 		return
 	end
 	LastHitTick = now
+	triggerAutoHaki()
 	pcall(function()
 		local tool = char and char:FindFirstChildOfClass("Tool")
 		if tool then
@@ -1923,55 +2236,32 @@ local function getNearestByPredicate(myPos, predicate)
 	return bestEnemy, bestRoot, bestHum
 end
 
-local function getNearestEnemy(myPos, myLvl)
+local function getBracketEnemy(myPos, bracket)
 	local enemiesFolder = Workspace:FindFirstChild("Enemies")
-	if not enemiesFolder then
+	if not enemiesFolder or not bracket then
 		return nil, nil, nil
 	end
 
-	local bestTierEnemy, bestTierRoot, bestTierHum, bestTierScore = nil, nil, nil, math.huge
-	local fallbackEnemy, fallbackRoot, fallbackHum, fallbackDist = nil, nil, nil, math.huge
-
+	local bestEnemy, bestRoot, bestHum, bestDist = nil, nil, nil, math.huge
 	for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-		if enemy:IsA("Model") then
+		if enemy:IsA("Model") and enemyMatchesBracket(enemy, bracket) then
 			local eRoot = enemy:FindFirstChild("HumanoidRootPart")
 			local eHum = enemy:FindFirstChildOfClass("Humanoid")
 			if eRoot and eHum and eHum.Health > 0 then
 				local dist = (myPos - eRoot.Position).Magnitude
-				local eLvl = getEnemyLevel(enemy)
-
-				if not eLvl or eLvl <= myLvl then
-					if dist < fallbackDist then
-						fallbackDist = dist
-						fallbackEnemy = enemy
-						fallbackRoot = eRoot
-						fallbackHum = eHum
-					end
-
-					if eLvl then
-						local lvlDiff = myLvl - eLvl
-						if lvlDiff >= 0 and lvlDiff <= 50 then
-							local score = dist + (lvlDiff * 25)
-							if score < bestTierScore then
-								bestTierScore = score
-								bestTierEnemy = enemy
-								bestTierRoot = eRoot
-								bestTierHum = eHum
-							end
-						end
-					end
+				if dist < bestDist then
+					bestDist = dist
+					bestEnemy = enemy
+					bestRoot = eRoot
+					bestHum = eHum
 				end
 			end
 		end
 	end
-
-	if bestTierEnemy then
-		return bestTierEnemy, bestTierRoot, bestTierHum
-	end
-	return fallbackEnemy, fallbackRoot, fallbackHum
+	return bestEnemy, bestRoot, bestHum
 end
 
-local function bringMobsUnderPlayer(centerPos, mainEnemyRoot)
+local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, activeBracket)
 	if not BringMobsEnabled then
 		return
 	end
@@ -1982,7 +2272,7 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot)
 		end
 		local stackPos = mainEnemyRoot and mainEnemyRoot.Position or (centerPos + Vector3.new(0, -6.5, 0))
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-			if enemy:IsA("Model") then
+			if enemy:IsA("Model") and (not activeBracket or enemyMatchesBracket(enemy, activeBracket)) then
 				local eRoot = enemy:FindFirstChild("HumanoidRootPart")
 				local eHum = enemy:FindFirstChildOfClass("Humanoid")
 				if eRoot and eHum and eHum.Health > 0 then
@@ -2004,11 +2294,10 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot)
 	end)
 end
 
-local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefix, statusColor)
+local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefix, statusColor, activeBracket)
 	if targetEnemy and tRoot and tHum and tHum.Health > 0 then
-		local tLvl = getEnemyLevel(targetEnemy)
-		local lvlTag = tLvl and (" [Lv." .. tostring(tLvl) .. "]") or ""
-		StatusLabel.Text = "●  " .. statusPrefix .. ": " .. tostring(targetEnemy.Name) .. lvlTag
+		local reqTag = activeBracket and (" [Lv." .. tostring(activeBracket.minLvl) .. "-" .. tostring(activeBracket.maxLvl) .. "]") or ""
+		StatusLabel.Text = "●  " .. statusPrefix .. ": " .. tostring(targetEnemy.Name) .. reqTag
 		StatusLabel.TextColor3 = statusColor
 
 		local targetPos = tRoot.Position + Vector3.new(0, 6.5, 0)
@@ -2033,7 +2322,7 @@ local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefi
 
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
-		bringMobsUnderPlayer(root.Position, tRoot)
+		bringMobsUnderPlayer(root.Position, tRoot, activeBracket)
 		if dist <= 18 then
 			triggerHit(char)
 		end
@@ -2059,12 +2348,12 @@ task.spawn(function()
 
 				if FarmBonesEnabled then
 					local boneEnemy, bRoot, bHum = getNearestByPredicate(root.Position, isBoneEnemy)
-					if not farmTargetModel(char, root, boneEnemy, bRoot, bHum, "Bones Farm", Color3.fromRGB(226, 232, 240)) then
+					if not farmTargetModel(char, root, boneEnemy, bRoot, bHum, "Bones Farm", Color3.fromRGB(226, 232, 240), nil) then
 						local castlePos = getHauntedCastleBonesPosition()
 						local distToCastle = (root.Position - castlePos).Magnitude
-						StatusLabel.Text = "●  Flying to Haunted Castle [" .. tostring(math.floor(distToCastle)) .. "m]..."
+						StatusLabel.Text = "●  Bones Farm: Waiting Respawn [" .. tostring(math.floor(distToCastle)) .. "m]"
 						StatusLabel.TextColor3 = Color3.fromRGB(226, 232, 240)
-						if distToCastle > 15 then
+						if distToCastle > 18 then
 							local dur = math.clamp(distToCastle / math.max(FlySpeed, 60), 0.05, 8)
 							if CurrentTween then
 								pcall(function() CurrentTween:Cancel() end)
@@ -2078,12 +2367,12 @@ task.spawn(function()
 
 				if FarmDragonScaleEnabled then
 					local scaleEnemy, sRoot, sHum = getNearestByPredicate(root.Position, isDragonScaleEnemy)
-					if not farmTargetModel(char, root, scaleEnemy, sRoot, sHum, "Dragon Scale Farm", Color3.fromRGB(249, 115, 22)) then
+					if not farmTargetModel(char, root, scaleEnemy, sRoot, sHum, "Dragon Scale Farm", Color3.fromRGB(249, 115, 22), nil) then
 						local hydraPos = getHydraDragonScalePosition()
 						local distToHydra = (root.Position - hydraPos).Magnitude
-						StatusLabel.Text = "●  Flying to Hydra Island [" .. tostring(math.floor(distToHydra)) .. "m]..."
+						StatusLabel.Text = "●  Dragon Scale Farm: Waiting Respawn [" .. tostring(math.floor(distToHydra)) .. "m]"
 						StatusLabel.TextColor3 = Color3.fromRGB(249, 115, 22)
-						if distToHydra > 15 then
+						if distToHydra > 18 then
 							local dur = math.clamp(distToHydra / math.max(FlySpeed, 60), 0.05, 8)
 							if CurrentTween then
 								pcall(function() CurrentTween:Cancel() end)
@@ -2097,8 +2386,8 @@ task.spawn(function()
 
 				if FarmVampireEnabled then
 					local vampEnemy, vRoot, vHum = getNearestByPredicate(root.Position, isVampireEnemy)
-					if not farmTargetModel(char, root, vampEnemy, vRoot, vHum, "Fangs Farm", Color3.fromRGB(244, 63, 94)) then
-						StatusLabel.Text = "●  Searching Vampire (Fangs)..."
+					if not farmTargetModel(char, root, vampEnemy, vRoot, vHum, "Fangs Farm", Color3.fromRGB(244, 63, 94), nil) then
+						StatusLabel.Text = "●  Fangs Farm: Waiting Vampire Respawn..."
 						StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
 					end
 					return
@@ -2106,37 +2395,48 @@ task.spawn(function()
 
 				if FarmDemonicSoulEnabled then
 					local soulEnemy, sRoot, sHum = getNearestByPredicate(root.Position, isDemonicSoulEnemy)
-					if not farmTargetModel(char, root, soulEnemy, sRoot, sHum, "Demonic Soul Farm", Color3.fromRGB(192, 132, 252)) then
-						StatusLabel.Text = "●  Searching Demonic Soul..."
+					if not farmTargetModel(char, root, soulEnemy, sRoot, sHum, "Demonic Soul Farm", Color3.fromRGB(192, 132, 252), nil) then
+						StatusLabel.Text = "●  Demonic Soul Farm: Waiting Respawn..."
 						StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
 					end
 					return
 				end
 
-				if AutoQuestEnabled and not hasActiveQuest() then
-					local qPart, qDist = findQuestNPC(root.Position)
-					if qPart and qDist < 900 then
-						StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Taking Quest..."
-						StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
-						local targetQPos = qPart.Position + Vector3.new(0, 2, -4)
-						local d = (root.Position - targetQPos).Magnitude
-						if d > 8 then
-							local dur = math.clamp(d / math.max(FlySpeed, 60), 0.05, 3)
-							if CurrentTween then
-								pcall(function() CurrentTween:Cancel() end)
-							end
-							CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetQPos)})
-							CurrentTween:Play()
-							task.wait(dur)
-						end
-						interactWithQuest(root, qPart)
+				if AutoQuestFarmEnabled then
+					if not LockedFarmBracket or myLvl > LockedFarmBracket.maxLvl or myLvl < LockedFarmBracket.minLvl then
+						LockedFarmBracket = getBracketForLevel(myLvl)
 					end
-				end
 
-				local mainEnemy, eRoot, eHum = getNearestEnemy(root.Position, myLvl)
-				if not farmTargetModel(char, root, mainEnemy, eRoot, eHum, "Lv." .. tostring(myLvl) .. " | Farm", Color3.fromRGB(74, 222, 128)) then
-					StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Searching Level Mobs..."
-					StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+					local bracket = LockedFarmBracket
+					local reqRangeText = "Lv." .. tostring(bracket.minLvl) .. "-" .. tostring(bracket.maxLvl)
+
+					if AutoQuestEnabled and not hasActiveQuest() then
+						local qPart, qDist = findQuestNPC(root.Position)
+						if qPart and qDist < 250 then
+							StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Taking Quest (" .. bracket.questText .. ")..."
+							StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+							local targetQPos = qPart.Position + Vector3.new(0, 2, -4)
+							local d = (root.Position - targetQPos).Magnitude
+							if d > 8 then
+								local dur = math.clamp(d / math.max(FlySpeed, 60), 0.05, 3)
+								if CurrentTween then
+									pcall(function() CurrentTween:Cancel() end)
+								end
+								CurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetQPos)})
+								CurrentTween:Play()
+								task.wait(dur)
+							end
+							interactWithQuest(root, qPart)
+						end
+					end
+
+					local mainEnemy, eRoot, eHum = getBracketEnemy(root.Position, bracket)
+					if not farmTargetModel(char, root, mainEnemy, eRoot, eHum, "Lv." .. tostring(myLvl) .. " | " .. bracket.questText, Color3.fromRGB(74, 222, 128), bracket) then
+						StatusLabel.Text = "●  Lv." .. tostring(myLvl) .. " | Waiting Respawn: " .. bracket.questText .. " [" .. reqRangeText .. "]"
+						StatusLabel.TextColor3 = Color3.fromRGB(250, 204, 21)
+						root.AssemblyLinearVelocity = Vector3.zero
+						root.AssemblyAngularVelocity = Vector3.zero
+					end
 				end
 			end)
 		else
@@ -2369,6 +2669,10 @@ RunService.Stepped:Connect(function()
 		end
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		local root = char:FindFirstChild("HumanoidRootPart")
+
+		if WalkOnWaterEnabled and root then
+			ensureWalkOnWaterPart(root.Position)
+		end
 
 		if hum and WalkSpeedEnabled and hum.WalkSpeed ~= TargetWalkSpeed then
 			hum.WalkSpeed = TargetWalkSpeed
