@@ -5,7 +5,11 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
-local VirtualUser = game:GetService("VirtualUser")
+
+local VirtualUser = nil
+pcall(function()
+	VirtualUser = game:GetService("VirtualUser")
+end)
 
 local VirtualInputManager = nil
 pcall(function()
@@ -138,7 +142,7 @@ local EnemyLevelBrackets = {
 	{minLvl = 1250, maxLvl = 1274, keywords = {"ship deckhand"}, questText = "Ship Deckhand"},
 	{minLvl = 1275, maxLvl = 1299, keywords = {"ship engineer"}, questText = "Ship Engineer"},
 	{minLvl = 1300, maxLvl = 1324, keywords = {"ship steward"}, questText = "Ship Steward"},
-	{minLvl = 1325, maxLvl = 1349, keywords = {"ship officer"}, questText = "Ship Officer"},
+	{minLvl = 1325, maxLvl = 1349, keywords = "Ship Officer"},
 	{minLvl = 1350, maxLvl = 1374, keywords = {"arctic warrior"}, questText = "Arctic Warrior"},
 	{minLvl = 1375, maxLvl = 1424, keywords = {"snow lurker"}, questText = "Snow Lurker"},
 	{minLvl = 1425, maxLvl = 1449, keywords = {"sea soldier"}, questText = "Sea Soldier"},
@@ -186,6 +190,7 @@ local EnemyLevelBrackets = {
 	{minLvl = 2700, maxLvl = 2724, keywords = {"high disciple"}, questText = "High Disciple"},
 	{minLvl = 2725, maxLvl = 9999, keywords = {"high disciple"}, questText = "High Disciple"}
 }
+EnemyLevelBrackets[44] = {minLvl = 1325, maxLvl = 1349, keywords = {"ship officer"}, questText = "Ship Officer"}
 
 local AllowedChestNames = {
 	"GoldChest",
@@ -314,11 +319,13 @@ local function captureOriginalFogState()
 				state.Effects[obj] = obj.Enabled
 			end
 		end
-		for _, obj in ipairs(Camera:GetDescendants()) do
-			if obj:IsA("Atmosphere") then
-				state.Atmospheres[obj] = {Density = obj.Density, Haze = obj.Haze, Glare = obj.Glare}
-			elseif obj:IsA("ColorCorrectionEffect") or obj:IsA("BlurEffect") then
-				state.Effects[obj] = obj.Enabled
+		if Camera then
+			for _, obj in ipairs(Camera:GetDescendants()) do
+				if obj:IsA("Atmosphere") then
+					state.Atmospheres[obj] = {Density = obj.Density, Haze = obj.Haze, Glare = obj.Glare}
+				elseif obj:IsA("ColorCorrectionEffect") or obj:IsA("BlurEffect") then
+					state.Effects[obj] = obj.Enabled
+				end
 			end
 		end
 		SavedFogState = state
@@ -588,14 +595,12 @@ local function triggerAutoHaki()
 end
 
 pcall(function()
-	if VirtualUser and typeof(VirtualUser.CaptureController) == "function" then
+	if VirtualUser then
 		LocalPlayer.Idled:Connect(function()
 			if AntiAFKEnabled then
 				pcall(function()
 					VirtualUser:CaptureController()
-					if typeof(VirtualUser.ClickButton2) == "function" then
-						VirtualUser:ClickButton2(Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5))
-					end
+					VirtualUser:ClickButton2(Vector2.new(500, 500))
 				end)
 			end
 		end)
@@ -618,32 +623,19 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = guiParent
 
-local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-local UIScale = Instance.new("UIScale")
-UIScale.Parent = ScreenGui
+local isMobile = false
+pcall(function()
+	local vp = Camera and Camera.ViewportSize or Vector2.new(1280, 720)
+	isMobile = (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) or vp.X < 750
+end)
 
 local MainFrame = Instance.new("Frame")
+MainFrame.Size = isMobile and UDim2.new(0, 326, 0, 368) or UDim2.new(0, 445, 0, 442)
+MainFrame.Position = isMobile and UDim2.new(0.03, 0, 0.11, 0) or UDim2.new(0.02, 0, 0.22, 0)
 MainFrame.BackgroundColor3 = BgDark
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
 MainFrame.Parent = ScreenGui
-
-local function applyDeviceLayout()
-	local vp = Camera.ViewportSize
-	isMobile = (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) or vp.X < 750
-
-	if isMobile then
-		MainFrame.Size = UDim2.new(0, 326, 0, 368)
-		UIScale.Scale = math.clamp(vp.Y / 480, 0.72, 0.96)
-	else
-		MainFrame.Size = UDim2.new(0, 445, 0, 442)
-		UIScale.Scale = math.clamp(vp.Y / 900, 0.88, 1.15)
-	end
-end
-
-MainFrame.Position = isMobile and UDim2.new(0.03, 0, 0.11, 0) or UDim2.new(0.02, 0, 0.22, 0)
-applyDeviceLayout()
-Camera:GetPropertyChangedSignal("ViewportSize"):Connect(applyDeviceLayout)
 
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 14)
 local mainStroke = Instance.new("UIStroke", MainFrame)
@@ -961,8 +953,7 @@ local function makeDraggable(handle, target)
 	UserInputService.InputChanged:Connect(function(input)
 		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 			local delta = input.Position - dragStart
-			local scale = UIScale.Scale > 0 and UIScale.Scale or 1
-			target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + (delta.X / scale), startPos.Y.Scale, startPos.Y.Offset + (delta.Y / scale))
+			target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
 		end
 	end)
 	handle.InputEnded:Connect(function(input)
@@ -1385,12 +1376,12 @@ local function getPlayerLevel()
 	local ok, lvl = pcall(function()
 		local data = LocalPlayer:FindFirstChild("Data")
 		local levelVal = data and data:FindFirstChild("Level")
-		if levelVal and typeof(levelVal.Value) == "number" then
+		if levelVal and type(levelVal.Value) == "number" then
 			return levelVal.Value
 		end
 		local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
 		local lsLevel = leaderstats and (leaderstats:FindFirstChild("Level") or leaderstats:FindFirstChild("Lvl"))
-		if lsLevel and typeof(lsLevel.Value) == "number" then
+		if lsLevel and type(lsLevel.Value) == "number" then
 			return lsLevel.Value
 		end
 		return 1
@@ -1888,9 +1879,9 @@ task.spawn(function()
 						stopTween("Fruit")
 						root.CFrame = goalCF
 						for _, desc in ipairs(fruitObj:GetDescendants()) do
-							if desc:IsA("ProximityPrompt") and typeof(fireproximityprompt) == "function" then
+							if desc:IsA("ProximityPrompt") and type(fireproximityprompt) == "function" then
 								pcall(function() fireproximityprompt(desc) end)
-							elseif desc:IsA("ClickDetector") and typeof(fireclickdetector) == "function" then
+							elseif desc:IsA("ClickDetector") and type(fireclickdetector) == "function" then
 								pcall(function() fireclickdetector(desc) end)
 							end
 						end
@@ -2001,7 +1992,7 @@ local function applyAimBot(char, root)
 	end
 	pcall(function()
 		local aimPart, aimName = getAimTargetPart(root)
-		if aimPart then
+		if aimPart and Camera then
 			Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, aimPart.Position)
 			local flatLook = CFrame.lookAt(root.Position, Vector3.new(aimPart.Position.X, root.Position.Y, aimPart.Position.Z))
 			root.CFrame = CFrame.new(root.Position) * flatLook.Rotation
@@ -2035,21 +2026,20 @@ local function fireCombatStrike(char, minCooldown, useExtraClicks, targetModel)
 			end
 		end
 		fireCombatRemotes(targetModel or CurrentCombatTargetModel)
-		local x = Camera.ViewportSize.X * 0.5
-		local y = Camera.ViewportSize.Y * 0.5
-		if VirtualInputManager and typeof(VirtualInputManager.SendMouseButtonEvent) == "function" then
+		local vp = Camera and Camera.ViewportSize or Vector2.new(1280, 720)
+		local x = vp.X * 0.5
+		local y = vp.Y * 0.5
+		if VirtualInputManager and type(VirtualInputManager.SendMouseButtonEvent) == "function" then
 			pcall(function() VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1) end)
 			pcall(function() VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1) end)
 		end
-		if VirtualUser and typeof(VirtualUser.CaptureController) == "function" then
+		if VirtualUser then
 			pcall(function()
 				VirtualUser:CaptureController()
-				if typeof(VirtualUser.ClickButton1) == "function" then
-					VirtualUser:ClickButton1(Vector2.new(x, y))
-				end
+				VirtualUser:ClickButton1(Vector2.new(x, y))
 			end)
 		end
-		if useExtraClicks and typeof(mouse1click) == "function" then
+		if useExtraClicks and type(mouse1click) == "function" then
 			pcall(function() mouse1click() end)
 		end
 	end)
@@ -2112,7 +2102,9 @@ task.spawn(function()
 					else
 						stopTween("PvP")
 						root.CFrame = goalCF
-						Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
+						if Camera then
+							Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tRoot.Position)
+						end
 					end
 
 					root.AssemblyLinearVelocity = Vector3.zero
@@ -2154,9 +2146,9 @@ local function interactWithQuest(root, questPart)
 		if questPart then
 			root.CFrame = questPart.CFrame * CFrame.new(0, 0, -4)
 			for _, desc in ipairs(questPart.Parent:GetDescendants()) do
-				if desc:IsA("ProximityPrompt") and typeof(fireproximityprompt) == "function" then
+				if desc:IsA("ProximityPrompt") and type(fireproximityprompt) == "function" then
 					pcall(function() fireproximityprompt(desc) end)
-				elseif desc:IsA("ClickDetector") and typeof(fireclickdetector) == "function" then
+				elseif desc:IsA("ClickDetector") and type(fireclickdetector) == "function" then
 					pcall(function() fireclickdetector(desc) end)
 				end
 			end
@@ -2608,7 +2600,12 @@ RunService.Stepped:Connect(function()
 	end)
 end)
 
-if Drawing and typeof(Drawing.new) == "function" then
+local hasDrawing = false
+pcall(function()
+	hasDrawing = (Drawing ~= nil and type(Drawing.new) == "function")
+end)
+
+if hasDrawing then
 	local function createDrawing(drawType, properties)
 		local ok, obj = pcall(function() return Drawing.new(drawType) end)
 		if not ok or not obj then
@@ -2698,7 +2695,7 @@ if Drawing and typeof(Drawing.new) == "function" then
 	end
 
 	RunService.RenderStepped:Connect(function()
-		if not ScriptRunning then
+		if not ScriptRunning or not Camera then
 			return
 		end
 		pcall(function()
