@@ -221,6 +221,7 @@ local TrackedNPCs = {}
 local TrackedChests = {}
 local TrackedFruits = {}
 local SeaEventKeywords = {"seabeast", "sea beast", "terror", "shark", "leviathan", "piranha", "ship", "ghost", "mirage", "kitsune"}
+local CurrentCombatTargetModel = nil
 
 local function stopTween(owner)
 	if CurrentTween and (not owner or ActiveTweenOwner == owner) then
@@ -727,6 +728,7 @@ ExitBtn.MouseButton1Click:Connect(function()
 	ScriptRunning = false
 	LockedSailDir = nil
 	LockedFarmBracket = nil
+	CurrentCombatTargetModel = nil
 	WalkOnWaterEnabled = false
 	ensureWalkOnWaterPart(nil)
 	if RemoveFogEnabled then
@@ -1435,30 +1437,35 @@ createToggle(Container2, "Auto Farm Mobs (Level Locked)", 0, false, function(sta
 		LockedFarmBracket = nil
 	end
 	if not hasActiveTargetFarm() then
+		CurrentCombatTargetModel = nil
 		stopTween("Farm")
 	end
 end)
 createToggle(Container2, "Farm Vampire (Fangs)", 38, false, function(state)
 	FarmVampireEnabled = state
 	if not hasActiveTargetFarm() then
+		CurrentCombatTargetModel = nil
 		stopTween("Farm")
 	end
 end)
 createToggle(Container2, "Farm Demonic Soul", 76, false, function(state)
 	FarmDemonicSoulEnabled = state
 	if not hasActiveTargetFarm() then
+		CurrentCombatTargetModel = nil
 		stopTween("Farm")
 	end
 end)
 createToggle(Container2, "Auto farm dragon scale", 114, false, function(state)
 	FarmDragonScaleEnabled = state
 	if not hasActiveTargetFarm() then
+		CurrentCombatTargetModel = nil
 		stopTween("Farm")
 	end
 end)
 createToggle(Container2, "Auto Farm Bones", 152, false, function(state)
 	FarmBonesEnabled = state
 	if not hasActiveTargetFarm() then
+		CurrentCombatTargetModel = nil
 		stopTween("Farm")
 	end
 end)
@@ -1893,6 +1900,43 @@ local function isPointerOverUI()
 	return ok and over or false
 end
 
+local function collectHitParts(targetModel)
+	local hits = {}
+	if not targetModel or not targetModel.Parent then
+		return hits
+	end
+	pcall(function()
+		local tRoot = targetModel:FindFirstChild("HumanoidRootPart")
+		if tRoot and tRoot:IsA("BasePart") then
+			table.insert(hits, {tRoot, tRoot.Position})
+		end
+		for _, part in ipairs(targetModel:GetChildren()) do
+			if part:IsA("BasePart") and part ~= tRoot then
+				table.insert(hits, {part, part.Position})
+			end
+		end
+	end)
+	return hits
+end
+
+local function fireCombatRemotes(targetModel)
+	pcall(function()
+		local hitList = collectHitParts(targetModel)
+		local net = ReplicatedStorage:FindFirstChild("Modules") and ReplicatedStorage.Modules:FindFirstChild("Net")
+		if net then
+			local regAttack = net:FindFirstChild("RE/RegisterAttack")
+			local regHit = net:FindFirstChild("RE/RegisterHit")
+			if regAttack and regAttack:IsA("RemoteEvent") then
+				pcall(function() regAttack:FireServer(0) end)
+			end
+			if regHit and regHit:IsA("RemoteEvent") and #hitList > 0 then
+				local mainPart = hitList[1][1]
+				pcall(function() regHit:FireServer(mainPart, hitList) end)
+			end
+		end
+	end)
+end
+
 local function getAimTargetPart(myRoot)
 	local targetPlr = SelectedPvPPlayer
 	if targetPlr and targetPlr.Parent and targetPlr ~= LocalPlayer then
@@ -1944,7 +1988,7 @@ local function applyAimBot(char, root)
 	end)
 end
 
-local function fireCombatStrike(char, minCooldown, useExtraClicks)
+local function fireCombatStrike(char, minCooldown, useExtraClicks, targetModel)
 	local now = tick()
 	if (now - LastHitTick) < minCooldown then
 		return
@@ -1965,6 +2009,7 @@ local function fireCombatStrike(char, minCooldown, useExtraClicks)
 				pcall(function() remote:FireServer(1) end)
 			end
 		end
+		fireCombatRemotes(targetModel or CurrentCombatTargetModel)
 		local x = Camera.ViewportSize.X * 0.5
 		local y = Camera.ViewportSize.Y * 0.5
 		if VirtualInputManager then
@@ -1981,15 +2026,15 @@ local function fireCombatStrike(char, minCooldown, useExtraClicks)
 	end)
 end
 
-local function triggerAutoClickerHit(char)
-	fireCombatStrike(char, FastAttackEnabled and 0.09 or 0.16, true)
+local function triggerAutoClickerHit(char, targetModel)
+	fireCombatStrike(char, FastAttackEnabled and 0.08 or 0.15, true, targetModel)
 end
 
-local function triggerHit(char)
+local function triggerHit(char, targetModel)
 	if isPointerOverUI() then
 		return
 	end
-	fireCombatStrike(char, FastAttackEnabled and 0.11 or 0.18, false)
+	fireCombatStrike(char, FastAttackEnabled and 0.09 or 0.16, true, targetModel)
 end
 
 task.spawn(function()
@@ -2044,7 +2089,7 @@ task.spawn(function()
 					root.AssemblyLinearVelocity = Vector3.zero
 					root.AssemblyAngularVelocity = Vector3.zero
 					if dist <= 22 then
-						triggerAutoClickerHit(char)
+						triggerAutoClickerHit(char, tChar)
 					end
 				end
 			end)
@@ -2154,7 +2199,7 @@ local function bringMobsUnderPlayer(centerPos, mainEnemyRoot, activeBracket)
 		if not enemiesFolder then
 			return
 		end
-		local stackPos = mainEnemyRoot and mainEnemyRoot.Position or (centerPos + Vector3.new(0, -6.5, 0))
+		local stackPos = mainEnemyRoot and (mainEnemyRoot.Position - Vector3.new(0, 1.5, 0)) or (centerPos - Vector3.new(0, 6.5, 0))
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 			if enemy:IsA("Model") and (not activeBracket or enemyMatchesBracket(enemy, activeBracket)) then
 				local eRoot = enemy:FindFirstChild("HumanoidRootPart")
@@ -2176,37 +2221,38 @@ end
 
 local function farmTargetModel(char, root, targetEnemy, tRoot, tHum, statusPrefix, statusColor, activeBracket)
 	if targetEnemy and tRoot and tHum and tHum.Health > 0 then
+		CurrentCombatTargetModel = targetEnemy
 		local reqTag = activeBracket and (" [Lv." .. tostring(activeBracket.minLvl) .. "-" .. tostring(activeBracket.maxLvl) .. "]") or ""
-		StatusLabel.Text = "●  " .. statusPrefix .. " [" .. SelectedFarmWeapon .. "]: " .. tostring(targetEnemy.Name) .. reqTag
+		StatusLabel.Text = "●  " .. statusPrefix .. " [" .. SelectedFarmWeapon .. "]: " .. tostring(targetEnemy.Name) .. " (" .. tostring(math.floor(tHum.Health)) .. " HP)" .. reqTag
 		StatusLabel.TextColor3 = statusColor
 
-		local hoverHeight = (SelectedFarmWeapon == "Gun") and 11.0 or 7.5
+		local hoverHeight = (SelectedFarmWeapon == "Gun") and 9.5 or 6.5
 		local targetPos = tRoot.Position + Vector3.new(0, hoverHeight, 0)
 		local lookCF = CFrame.lookAt(targetPos, tRoot.Position)
 		local dist = (root.Position - targetPos).Magnitude
 
-		if dist > 4.5 then
+		if dist > 3.5 then
 			startTween(root, "Farm", lookCF, FlySpeed, 2.5)
 		else
 			stopTween("Farm")
 			root.CFrame = lookCF
-			Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position + Vector3.new(0, 2.5, 0), tRoot.Position)
 		end
 
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
 		bringMobsUnderPlayer(root.Position, tRoot, activeBracket)
-		if dist <= 24 then
-			triggerHit(char)
+		if (root.Position - tRoot.Position).Magnitude <= 35 then
+			triggerHit(char, targetEnemy)
 		end
 		return true
 	end
+	CurrentCombatTargetModel = nil
 	return false
 end
 
 task.spawn(function()
 	while ScriptRunning do
-		task.wait(0.08)
+		task.wait(0.06)
 		if hasActiveTargetFarm() then
 			pcall(function()
 				local char = LocalPlayer.Character
@@ -2399,7 +2445,7 @@ task.spawn(function()
 							local eHum = enemy:FindFirstChildOfClass("Humanoid")
 							if eRoot and eHum and eHum.Health > 0 and (myRoot.Position - eRoot.Position).Magnitude < 250 then
 								equipBestCombatTool()
-								triggerHit(myChar)
+								triggerHit(myChar, enemy)
 								break
 							end
 						end
@@ -2512,11 +2558,6 @@ RunService.Stepped:Connect(function()
 		end
 
 		local noclipActive = AutoChestEnabled or hasActiveTargetFarm() or PvPEnabled or AutoGetFruitsEnabled or (BoatNoclipEnabled and hum and hum.SeatPart)
-
-		if (hasActiveTargetFarm() or AutoChestEnabled or PvPEnabled or AutoGetFruitsEnabled) and root then
-			root.AssemblyLinearVelocity = Vector3.zero
-			root.AssemblyAngularVelocity = Vector3.zero
-		end
 
 		if noclipActive then
 			for _, part in ipairs(char:GetChildren()) do
