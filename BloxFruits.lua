@@ -261,7 +261,6 @@ end
 
 local TrackedPlayers = {}
 local TrackedNPCs = {}
-local SeaEventKeywords = {"seabeast", "sea beast", "terror", "shark", "leviathan", "piranha", "ship", "ghost", "mirage", "kitsune"}
 
 local function hasActiveTargetFarm()
 	return AutoFarmEnabled or FarmVampireEnabled or FarmDemonicSoulEnabled or FarmDragonScaleEnabled or FarmBonesEnabled
@@ -348,6 +347,27 @@ local function clearFlyMover(root)
 			end
 		end
 	end)
+end
+
+local function applyWalkSpeedBoost(char, hum, root)
+	if not hum or hum.Health <= 0 then return end
+	if WalkSpeedEnabled then
+		if hum.WalkSpeed ~= TargetWalkSpeed then
+			hum.WalkSpeed = TargetWalkSpeed
+		end
+		if root and not hum.SeatPart and not hasActiveTargetFarm() and not AutoChestEnabled and not PvPEnabled then
+			local moveDir = hum.MoveDirection
+			if moveDir.Magnitude > 0.05 then
+				local horiz = Vector3.new(moveDir.X, 0, moveDir.Z)
+				if horiz.Magnitude > 0.01 then
+					local vel = horiz.Unit * TargetWalkSpeed
+					root.AssemblyLinearVelocity = Vector3.new(vel.X, root.AssemblyLinearVelocity.Y, vel.Z)
+				end
+			end
+		end
+	elseif hum.WalkSpeed > 25 then
+		hum.WalkSpeed = 16
+	end
 end
 
 local function moveToTarget(root, targetCF, speed)
@@ -856,6 +876,7 @@ ExitBtn.MouseButton1Click:Connect(function()
 	ActiveFarmEnemy = nil
 	LockedSailDir = nil
 	LockedFarmBracket = nil
+	WalkSpeedEnabled = false
 	WalkOnWaterEnabled = false
 	ensureWalkOnWaterPart(nil)
 	if RemoveFogEnabled then
@@ -1429,11 +1450,26 @@ end)
 createToggle(Container3, "Walk Speed Boost", 0, false, function(state)
 	WalkSpeedEnabled = state
 	pcall(function()
-		local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-		if hum then hum.WalkSpeed = state and TargetWalkSpeed or 16 end
+		local char = LocalPlayer.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local root = char and char:FindFirstChild("HumanoidRootPart")
+		if hum then
+			hum.WalkSpeed = state and TargetWalkSpeed or 16
+			if not state and root then
+				root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
+			end
+		end
 	end)
 end)
-createSlider(Container3, 38, "Walk Speed", 16, 350, TargetWalkSpeed, function(val) TargetWalkSpeed = val end)
+createSlider(Container3, 38, "Walk Speed", 16, 350, TargetWalkSpeed, function(val)
+	TargetWalkSpeed = val
+	if WalkSpeedEnabled then
+		pcall(function()
+			local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+			if hum then hum.WalkSpeed = TargetWalkSpeed end
+		end)
+	end
+end)
 createToggle(Container3, "Walk On Water", 88, false, function(state)
 	WalkOnWaterEnabled = state
 	if not state then ensureWalkOnWaterPart(nil) end
@@ -1817,9 +1853,7 @@ RunService.Stepped:Connect(function()
 	if WalkOnWaterEnabled and root then
 		ensureWalkOnWaterPart(root.Position)
 	end
-	if hum and WalkSpeedEnabled and hum.WalkSpeed ~= TargetWalkSpeed then
-		hum.WalkSpeed = TargetWalkSpeed
-	end
+	applyWalkSpeedBoost(char, hum, root)
 	if AutoSailEnabled and hum and hum.SeatPart and LockedSailDir then
 		local seat = hum.SeatPart
 		local vel = LockedSailDir * TargetBoatSpeed
@@ -1849,6 +1883,15 @@ RunService.Stepped:Connect(function()
 			end
 		end
 	end
+end)
+
+RunService.Heartbeat:Connect(function()
+	if not ScriptRunning then return end
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local root = char:FindFirstChild("HumanoidRootPart")
+	applyWalkSpeedBoost(char, hum, root)
 end)
 
 if Drawing and type(Drawing.new) == "function" then
