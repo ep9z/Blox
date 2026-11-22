@@ -78,8 +78,11 @@ local State = {
 	WeaponIndex = 1,
 	RaidChipIndex = 1,
 	RaidIslandIndex = 1,
-	FistDetected = false
+	FistDetected = false,
+	FistCycleSeconds = 3600
 }
+
+local ServerBootClock = os.clock()
 
 local WeaponCategories = {"Melee", "Fruit", "Sword", "Gun"}
 
@@ -148,6 +151,9 @@ local RuntimeRefs = {
 	ActiveEnemy = nil,
 	SelectedPvP = nil,
 	LockedSailDir = nil,
+	LatestFistAnchor = nil,
+	LatestFistLabel = "Not Spawned",
+	LatestFistRemaining = "01:00:00",
 	VisitedChests = {},
 	PlayerESP = {}
 }
@@ -864,34 +870,64 @@ local function isDarkFistName(rawName)
 		or string.find(lower, "fistofdarkness", 1, true) ~= nil
 end
 
+local function formatClockHMS(secondsVal)
+	local total = math.max(0, math.floor(tonumber(secondsVal) or 0))
+	local h = math.floor(total / 3600)
+	local m = math.floor((total % 3600) / 60)
+	local s = total % 60
+	return string.format("%02d:%02d:%02d", h, m, s)
+end
+
 local function scanForDarkFist()
-	local searchScopes = {
-		{scope = Workspace, label = "Workspace"},
-		{scope = LocalPlayer and LocalPlayer:FindFirstChild("Backpack"), label = "Backpack"},
-		{scope = LocalPlayer and LocalPlayer.Character, label = "Character"}
-	}
-	for _, entry in ipairs(searchScopes) do
-		local container = entry.scope
-		if container then
-			for _, desc in ipairs(container:GetDescendants()) do
-				if isDarkFistName(desc.Name) then
-					local anchor = nil
-					if desc:IsA("BasePart") then
-						anchor = desc
-					elseif desc:IsA("Model") or desc:IsA("Tool") then
-						anchor = desc:FindFirstChild("Handle") or desc.PrimaryPart or desc:FindFirstChildWhichIsA("BasePart", true)
+	local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	local elapsed = math.max(0, os.clock() - ServerBootClock)
+	local remSec = State.FistCycleSeconds - (elapsed % State.FistCycleSeconds)
+	local remFormatted = formatClockHMS(remSec)
+	RuntimeRefs.LatestFistRemaining = remFormatted
+
+	for _, desc in ipairs(Workspace:GetDescendants()) do
+		if isDarkFistName(desc.Name) then
+			local ownerPlr = Players:GetPlayerFromCharacter(desc:FindFirstAncestorOfClass("Model"))
+			if ownerPlr then
+				local pRoot = ownerPlr.Character and ownerPlr.Character:FindFirstChild("HumanoidRootPart")
+				local distStr = (myRoot and pRoot) and (" [" .. tostring(math.floor((myRoot.Position - pRoot.Position).Magnitude)) .. "m]") or ""
+				RuntimeRefs.LatestFistAnchor = pRoot
+				RuntimeRefs.LatestFistLabel = "With " .. tostring(ownerPlr.Name) .. distStr
+				return true, "With " .. tostring(ownerPlr.Name) .. distStr, remFormatted
+			elseif not desc:FindFirstAncestorWhichIsA("Player") then
+				local anchor = nil
+				if desc:IsA("BasePart") then
+					anchor = desc
+				elseif desc:IsA("Model") or desc:IsA("Tool") then
+					anchor = desc:FindFirstChild("Handle") or desc.PrimaryPart or desc:FindFirstChildWhichIsA("BasePart", true)
+				end
+				local distStr = (myRoot and anchor) and (" [" .. tostring(math.floor((myRoot.Position - anchor.Position).Magnitude)) .. "m]") or ""
+				RuntimeRefs.LatestFistAnchor = anchor
+				RuntimeRefs.LatestFistLabel = "World Spawn" .. distStr
+				return true, "World Spawn" .. distStr, remFormatted
+			end
+		end
+	end
+
+	for _, plr in ipairs(Players:GetPlayers()) do
+		for _, bag in ipairs({plr:FindFirstChild("Backpack"), plr.Character}) do
+			if bag then
+				for _, item in ipairs(bag:GetDescendants()) do
+					if isDarkFistName(item.Name) then
+						local pRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+						local distStr = (myRoot and pRoot) and (" [" .. tostring(math.floor((myRoot.Position - pRoot.Position).Magnitude)) .. "m]") or ""
+						RuntimeRefs.LatestFistAnchor = pRoot
+						RuntimeRefs.LatestFistLabel = "Bag: " .. tostring(plr.Name) .. distStr
+						return true, "Bag: " .. tostring(plr.Name) .. distStr, remFormatted
 					end
-					local distLabel = ""
-					local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-					if anchor and myRoot then
-						distLabel = " [" .. tostring(math.floor((myRoot.Position - anchor.Position).Magnitude)) .. "m]"
-					end
-					return true, tostring(desc.Name) .. " (" .. entry.label .. ")" .. distLabel
 				end
 			end
 		end
 	end
-	return false, nil
+
+	RuntimeRefs.LatestFistAnchor = nil
+	RuntimeRefs.LatestFistLabel = "Not Spawned"
+	return false, "Not Spawned", remFormatted
 end
 
 local function triggerBusoHaki()
@@ -1037,7 +1073,7 @@ pcall(function()
 end)
 
 local MainWindow = Instance.new("Frame")
-MainWindow.Size = isCompactScreen and UDim2.new(0, 326, 0, 372) or UDim2.new(0, 445, 0, 446)
+MainWindow.Size = isCompactScreen and UDim2.new(0, 326, 0, 392) or UDim2.new(0, 445, 0, 466)
 MainWindow.Position = isCompactScreen and UDim2.new(0.03, 0, 0.11, 0) or UDim2.new(0.02, 0, 0.22, 0)
 MainWindow.BackgroundColor3 = ColorScheme.Background
 MainWindow.BorderSizePixel = 0
@@ -1166,21 +1202,43 @@ StatusText.TextSize = 10
 StatusText.TextXAlignment = Enum.TextXAlignment.Left
 StatusText.Parent = StatusBanner
 
-local FistBanner = Instance.new("TextLabel")
-FistBanner.Size = UDim2.new(1, -20, 0, 24)
-FistBanner.Position = UDim2.new(0, 10, 0, headerHeight + 36)
-FistBanner.BackgroundColor3 = Color3.fromRGB(127, 29, 29)
-FistBanner.TextColor3 = Color3.new(1, 1, 1)
-FistBanner.Font = Enum.Font.GothamBold
-FistBanner.TextSize = 10
-FistBanner.Text = "★  DARK FIST / FIST OF DARKNESS DETECTED!"
-FistBanner.Visible = false
-FistBanner.Parent = MainWindow
-Instance.new("UICorner", FistBanner).CornerRadius = UDim.new(0, 7)
+local FistTrackerCard = Instance.new("Frame")
+FistTrackerCard.Size = UDim2.new(1, -20, 0, 28)
+FistTrackerCard.Position = UDim2.new(0, 10, 0, headerHeight + 38)
+FistTrackerCard.BackgroundColor3 = ColorScheme.SurfaceAlt
+FistTrackerCard.BorderSizePixel = 0
+FistTrackerCard.Parent = MainWindow
+Instance.new("UICorner", FistTrackerCard).CornerRadius = UDim.new(0, 8)
+
+local FistCardStroke = Instance.new("UIStroke", FistTrackerCard)
+FistCardStroke.Color = ColorScheme.Primary
+FistCardStroke.Thickness = 1
+
+local FistTrackerLabel = Instance.new("TextLabel")
+FistTrackerLabel.Size = UDim2.new(1, -78, 1, 0)
+FistTrackerLabel.Position = UDim2.new(0, 8, 0, 0)
+FistTrackerLabel.BackgroundTransparency = 1
+FistTrackerLabel.Text = "Fist of Darkness: Not Spawned | Next: 01:00:00"
+FistTrackerLabel.TextColor3 = ColorScheme.Accent
+FistTrackerLabel.Font = Enum.Font.GothamBold
+FistTrackerLabel.TextSize = 9.5
+FistTrackerLabel.TextXAlignment = Enum.TextXAlignment.Left
+FistTrackerLabel.Parent = FistTrackerCard
+
+local FistActionBtn = Instance.new("TextButton")
+FistActionBtn.Size = UDim2.new(0, 64, 0, 20)
+FistActionBtn.Position = UDim2.new(1, -70, 0.5, -10)
+FistActionBtn.BackgroundColor3 = ColorScheme.Primary
+FistActionBtn.Text = "Scan Now"
+FistActionBtn.TextColor3 = Color3.new(1, 1, 1)
+FistActionBtn.Font = Enum.Font.GothamBold
+FistActionBtn.TextSize = 9
+FistActionBtn.Parent = FistTrackerCard
+Instance.new("UICorner", FistActionBtn).CornerRadius = UDim.new(0, 6)
 
 local NavStrip = Instance.new("Frame")
 NavStrip.Size = UDim2.new(1, -20, 0, 32)
-NavStrip.Position = UDim2.new(0, 10, 0, headerHeight + 40)
+NavStrip.Position = UDim2.new(0, 10, 0, headerHeight + 70)
 NavStrip.BackgroundColor3 = ColorScheme.Surface
 NavStrip.BorderSizePixel = 0
 NavStrip.ClipsDescendants = true
@@ -1194,7 +1252,7 @@ navLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 navLayout.Padding = UDim.new(0, 2)
 navLayout.Parent = NavStrip
 
-local contentTop = headerHeight + 80
+local contentTop = headerHeight + 108
 local function buildPageScroll(canvasHeight, visibleFlag)
 	local sf = Instance.new("ScrollingFrame")
 	sf.Size = UDim2.new(1, -20, 1, -(contentTop + 10))
@@ -1218,28 +1276,38 @@ local PageShop = buildPageScroll((#FightingStylesCatalog * 38) + 12, false)
 
 local allPages = {PageFarm, PageSea, PagePlayer, PageVisuals, PagePvP, PageFruits, PageShop}
 
-local function updateFistBannerUI(isFound, detailInfo)
-	if isFound then
-		FistBanner.Visible = true
-		FistBanner.Text = "★  DARK FIST SPAWNED: " .. tostring(detailInfo or "Found")
-		NavStrip.Position = UDim2.new(0, 10, 0, headerHeight + 64)
-		for _, page in ipairs(allPages) do
-			if page then
-				page.Position = UDim2.new(0, 10, 0, headerHeight + 104)
-				page.Size = UDim2.new(1, -20, 1, -(headerHeight + 114))
-			end
-		end
+local function syncFistTrackerDisplay(isSpawned, detailText, remText)
+	if isSpawned then
+		State.FistDetected = true
+		FistTrackerCard.BackgroundColor3 = Color3.fromRGB(110, 18, 32)
+		FistCardStroke.Color = ColorScheme.Warning
+		FistTrackerLabel.Text = "★ FIST SPAWNED: " .. tostring(detailText or "In Server")
+		FistTrackerLabel.TextColor3 = ColorScheme.Warning
+		FistActionBtn.BackgroundColor3 = ColorScheme.Success
+		FistActionBtn.Text = "Go Fist"
 	else
-		FistBanner.Visible = false
-		NavStrip.Position = UDim2.new(0, 10, 0, headerHeight + 40)
-		for _, page in ipairs(allPages) do
-			if page then
-				page.Position = UDim2.new(0, 10, 0, contentTop)
-				page.Size = UDim2.new(1, -20, 1, -(contentTop + 10))
-			end
-		end
+		State.FistDetected = false
+		FistTrackerCard.BackgroundColor3 = ColorScheme.SurfaceAlt
+		FistCardStroke.Color = ColorScheme.Primary
+		FistTrackerLabel.Text = "Fist of Darkness: Not Spawned | Next: " .. tostring(remText or "01:00:00")
+		FistTrackerLabel.TextColor3 = ColorScheme.Accent
+		FistActionBtn.BackgroundColor3 = ColorScheme.Primary
+		FistActionBtn.Text = "Scan Now"
 	end
 end
+
+FistActionBtn.MouseButton1Click:Connect(function()
+	local foundNow, infoStr, remStr = scanForDarkFist()
+	syncFistTrackerDisplay(foundNow, infoStr, remStr)
+	if foundNow and RuntimeRefs.LatestFistAnchor then
+		local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		if myRoot then
+			pcall(function()
+				myRoot.CFrame = RuntimeRefs.LatestFistAnchor.CFrame + Vector3.new(0, 3, 0)
+			end)
+		end
+	end
+end)
 
 local pageLabels = {"Farm", "Sea", "Player", "Visuals", "PvP", "Fruits", "Shop"}
 local pageButtons = {}
@@ -2016,7 +2084,7 @@ end
 local function engageEnemyTarget(char, root, enemyModel, enemyRoot, enemyHum, modeTag, bannerColor, bracket, pullAny)
 	if enemyModel and enemyRoot and enemyHum and enemyHum.Health > 0 then
 		local modeLabel = getSelectedWeaponMode()
-		local fistSuffix = State.FistDetected and " | ★ DARK FIST!" or ""
+		local fistSuffix = State.FistDetected and " | ★ FIST SPAWNED!" or ""
 		StatusText.Text = "●  " .. modeTag .. " [" .. modeLabel .. "]: " .. tostring(enemyModel.Name) .. " (" .. tostring(math.floor(enemyHum.Health)) .. " HP)" .. fistSuffix
 		StatusText.TextColor3 = State.FistDetected and ColorScheme.Warning or bannerColor
 		local hoverOffset = (modeLabel == "Gun") and 11 or 8
@@ -2033,27 +2101,22 @@ end
 
 task.spawn(function()
 	while State.Running do
-		task.wait(0.35)
-		local ok, foundFist, fistDetails = pcall(scanForDarkFist)
-		if ok and foundFist then
-			State.FistDetected = true
-			updateFistBannerUI(true, fistDetails)
-			if (tick() - Timers.LastFistAlert) >= 3 then
+		task.wait(0.5)
+		local ok, foundFist, fistDetails, remStr = pcall(scanForDarkFist)
+		if ok then
+			syncFistTrackerDisplay(foundFist, fistDetails, remStr)
+			if foundFist and (tick() - Timers.LastFistAlert) >= 4 then
 				Timers.LastFistAlert = tick()
+				print("[NEXOARO] Fist of Darkness Spawned -> " .. tostring(fistDetails))
 				if StarterGui then
 					pcall(function()
 						StarterGui:SetCore("SendNotification", {
-							Title = "NEXOARO | DARK FIST",
+							Title = "NEXOARO | FIST OF DARKNESS",
 							Text = "Spawned: " .. tostring(fistDetails),
 							Duration = 5
 						})
 					end)
 				end
-			end
-		else
-			if State.FistDetected then
-				State.FistDetected = false
-				updateFistBannerUI(false, nil)
 			end
 		end
 	end
@@ -2368,4 +2431,4 @@ if Drawing and type(Drawing.new) == "function" then
 	end)
 end
 
-print("[NEXOARO] Full Blox Fruits Hub Loaded")
+print("[NEXOARO] Full Blox Fruits Hub with Fist Tracker Loaded")
