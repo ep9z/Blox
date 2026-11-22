@@ -25,7 +25,6 @@ local AccentGlow = Color3.fromRGB(216, 180, 254)
 local TextMain = Color3.fromRGB(246, 245, 255)
 local TextMuted = Color3.fromRGB(154, 150, 178)
 local EnemyColor = Color3.fromRGB(244, 63, 94)
-local SeaBeastColor = Color3.fromRGB(56, 189, 248)
 local ChestColor = Color3.fromRGB(250, 204, 21)
 local FruitColor = Color3.fromRGB(192, 132, 252)
 
@@ -76,6 +75,7 @@ local SavedFogState = nil
 local LockedFarmBracket = nil
 local CachedCombatRemote = nil
 local ActiveFarmEnemy = nil
+local VisitedChests = {}
 
 local HydraIslandFallbackPos = Vector3.new(5750, 610, -280)
 local HauntedCastleFallbackPos = Vector3.new(-9500, 145, 6080)
@@ -497,33 +497,43 @@ local function getLockedOrNearestEnemy(myPos, predicate, bracket)
 	return bestEnemy, bestRoot, bestHum
 end
 
-local function getChestAnchorPart(obj)
-	if not obj or not obj.Parent then return nil end
-	if obj:IsA("BasePart") then
-		if obj:FindFirstChildWhichIsA("TouchTransmitter", true) or string.find(string.lower(obj.Name), "chest", 1, true) then
-			return obj
-		end
-	elseif obj:IsA("Model") then
-		local lower = string.lower(obj.Name)
-		if string.find(lower, "chest", 1, true) then
-			return obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart", true)
-		end
+local function isValidActiveChest(obj)
+	if not obj or not obj.Parent then return nil, nil end
+	if VisitedChests[obj] and (tick() - VisitedChests[obj]) < 12 then
+		return nil, nil
 	end
-	return nil
+	local lower = string.lower(tostring(obj.Name))
+	if not string.find(lower, "chest", 1, true) then
+		return nil, nil
+	end
+	local part = nil
+	if obj:IsA("BasePart") then
+		part = obj
+	elseif obj:IsA("Model") then
+		part = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart", true)
+	end
+	if not part or not part.Parent or part.CanTouch == false or part.Transparency >= 0.98 then
+		return nil, nil
+	end
+	local touch = part:FindFirstChildWhichIsA("TouchTransmitter", true) or (obj:IsA("Model") and obj:FindFirstChildWhichIsA("TouchTransmitter", true))
+	if not touch then
+		return nil, nil
+	end
+	return part, tostring(obj.Name)
 end
 
 local function findNearestChestPart(myPos)
-	local bestPart, bestName, bestDist = nil, nil, math.huge
+	local bestPart, bestName, bestDist, bestOwner = nil, nil, math.huge, nil
 	for _, obj in ipairs(Workspace:GetDescendants()) do
-		local part = getChestAnchorPart(obj)
-		if part and part.Parent and part.CanTouch ~= false then
+		local part, cName = isValidActiveChest(obj)
+		if part then
 			local dist = (myPos - part.Position).Magnitude
 			if dist < bestDist then
-				bestDist, bestPart, bestName = dist, part, obj.Name
+				bestDist, bestPart, bestName, bestOwner = dist, part, cName, obj
 			end
 		end
 	end
-	return bestPart, bestName, bestDist
+	return bestPart, bestName, bestDist, bestOwner
 end
 
 local function isVampireEnemy(model)
@@ -1423,6 +1433,7 @@ createSlider(Container1, 342, "Farm Fly Speed", 60, 800, FlySpeed, function(val)
 createToggle(Container2, "Boat Noclip (Rocks)", 0, false, function(state) BoatNoclipEnabled = state end)
 createToggle(Container2, "Auto Chest (All Map)", 38, false, function(state)
 	AutoChestEnabled = state
+	VisitedChests = {}
 	if not state and not hasActiveTargetFarm() then
 		clearFlyMover(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
 	end
@@ -1746,13 +1757,16 @@ task.spawn(function()
 			local char = LocalPlayer.Character
 			local root = char and char:FindFirstChild("HumanoidRootPart")
 			if root then
-				local chestPart, chestName, chestDist = findNearestChestPart(root.Position)
+				local chestPart, chestName, chestDist, chestOwner = findNearestChestPart(root.Position)
 				if chestPart then
 					StatusLabel.Text = "●  Chest: " .. tostring(chestName) .. " [" .. tostring(math.floor(chestDist)) .. "m]"
 					StatusLabel.TextColor3 = ChestColor
 					moveToTarget(root, chestPart.CFrame + Vector3.new(0, 1.5, 0), FlySpeed)
+					if chestDist <= 7 then
+						VisitedChests[chestOwner or chestPart] = tick()
+					end
 				else
-					StatusLabel.Text = "●  Chest: No loaded chests nearby"
+					StatusLabel.Text = "●  Chest: No active chests loaded nearby"
 					StatusLabel.TextColor3 = TextMuted
 				end
 			end
